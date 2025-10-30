@@ -1,0 +1,6 @@
+{
+    "name": "makehaven/material_inventory_totals",
+    "type": "drupal-custom-module",
+    "description": "Caches material inventory counts and values based on ECK adjustments.",
+    "license": "GPL-2.0-or-later"
+}
