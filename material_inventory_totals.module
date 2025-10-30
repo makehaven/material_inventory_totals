@@ -1,0 +1,147 @@
+<?php
+
+/**
+ * @file
+ * Hooks for the Material Inventory Totals module.
+ */
+
+use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
+
+/**
+ * Implements hook_cron().
+ */
+function material_inventory_totals_cron(): void {
+  /** @var \Drupal\material_inventory_totals\Service\InventoryTotalsCalculator $calculator */
+  $calculator = \Drupal::service('material_inventory_totals.calculator');
+
+  // Recalculate a small batch of materials on each cron run to detect drift.
+  $calculator->runConsistencyCheck(20);
+}
+
+/**
+ * Implements hook_entity_insert().
+ */
+function material_inventory_totals_entity_insert(EntityInterface $entity): void {
+  if (!material_inventory_totals_supports_entity($entity)) {
+    return;
+  }
+
+  $content_entity = $entity instanceof ContentEntityInterface ? $entity : NULL;
+  if (!$content_entity) {
+    return;
+  }
+
+  $material_id = material_inventory_totals_extract_material_id($content_entity);
+  $quantity = material_inventory_totals_extract_quantity($content_entity);
+
+  if ($material_id !== NULL && $quantity !== 0) {
+    material_inventory_totals_calculator()->applyDelta($material_id, $quantity);
+  }
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function material_inventory_totals_entity_update(EntityInterface $entity): void {
+  if (!material_inventory_totals_supports_entity($entity)) {
+    return;
+  }
+
+  if (!$entity instanceof ContentEntityInterface) {
+    return;
+  }
+
+  $material_id = material_inventory_totals_extract_material_id($entity);
+  $quantity = material_inventory_totals_extract_quantity($entity);
+
+  $original = $entity->original ?? NULL;
+  if (!$original instanceof ContentEntityInterface || !material_inventory_totals_supports_entity($original)) {
+    if ($material_id !== NULL) {
+      material_inventory_totals_calculator()->recalculate($material_id);
+    }
+    return;
+  }
+
+  $original_material_id = material_inventory_totals_extract_material_id($original);
+  $original_quantity = material_inventory_totals_extract_quantity($original);
+
+  if ($material_id !== NULL && $original_material_id !== NULL) {
+    if ($material_id === $original_material_id) {
+      $delta = $quantity - $original_quantity;
+      if ($delta !== 0) {
+        material_inventory_totals_calculator()->applyDelta($material_id, $delta);
+      }
+    }
+    else {
+      material_inventory_totals_calculator()->applyDelta($original_material_id, -$original_quantity);
+      material_inventory_totals_calculator()->applyDelta($material_id, $quantity);
+    }
+  }
+  elseif ($material_id !== NULL) {
+    material_inventory_totals_calculator()->recalculate($material_id);
+  }
+  elseif ($original_material_id !== NULL) {
+    material_inventory_totals_calculator()->recalculate($original_material_id);
+  }
+}
+
+/**
+ * Implements hook_entity_delete().
+ */
+function material_inventory_totals_entity_delete(EntityInterface $entity): void {
+  if (!material_inventory_totals_supports_entity($entity)) {
+    return;
+  }
+
+  if (!$entity instanceof ContentEntityInterface) {
+    return;
+  }
+
+  $material_id = material_inventory_totals_extract_material_id($entity);
+  $quantity = material_inventory_totals_extract_quantity($entity);
+
+  if ($material_id !== NULL && $quantity !== 0) {
+    material_inventory_totals_calculator()->applyDelta($material_id, -$quantity);
+  }
+}
+
+/**
+ * Checks if the entity is an inventory adjustment we care about.
+ */
+function material_inventory_totals_supports_entity(EntityInterface $entity): bool {
+  return $entity instanceof ContentEntityInterface
+    && $entity->getEntityTypeId() === 'material_inventory'
+    && $entity->bundle() === 'inventory_adjustment';
+}
+
+/**
+ * Extracts the referenced material node ID.
+ */
+function material_inventory_totals_extract_material_id(ContentEntityInterface $entity): ?int {
+  if (!$entity->hasField('field_inventory_ref_material')) {
+    return NULL;
+  }
+
+  $target = $entity->get('field_inventory_ref_material')->target_id;
+  return $target !== NULL ? (int) $target : NULL;
+}
+
+/**
+ * Extracts the quantity change from the entity.
+ */
+function material_inventory_totals_extract_quantity(ContentEntityInterface $entity): int {
+  if (!$entity->hasField('field_inventory_quantity_change')) {
+    return 0;
+  }
+
+  return (int) $entity->get('field_inventory_quantity_change')->value;
+}
+
+/**
+ * Helper to fetch the calculator service.
+ */
+function material_inventory_totals_calculator(): InventoryTotalsCalculator {
+  return \Drupal::service('material_inventory_totals.calculator');
+}

@@ -1,0 +1,8 @@
+name: 'Material Inventory Totals'
+type: module
+description: 'Maintains cached inventory counts and values for materials.'
+package: Custom
+core_version_requirement: ^10
+dependencies:
+  - drupal:node
+  - eck:eck

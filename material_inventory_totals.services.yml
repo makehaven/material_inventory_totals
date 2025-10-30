@@ -1,0 +1,13 @@
+services:
+  logger.channel.material_inventory_totals:
+    parent: logger.channel_base
+    arguments: ['material_inventory_totals']
+
+  material_inventory_totals.calculator:
+    class: Drupal\material_inventory_totals\Service\InventoryTotalsCalculator
+    arguments:
+      - '@entity_type.manager'
+      - '@database'
+      - '@state'
+      - '@lock'
+      - '@logger.channel.material_inventory_totals'
