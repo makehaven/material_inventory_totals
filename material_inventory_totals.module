@@ -8,6 +8,7 @@
 use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
+use Drupal\node\NodeInterface;
 
 /**
  * Implements hook_cron().
@@ -24,6 +25,10 @@ function material_inventory_totals_cron(): void {
  * Implements hook_entity_insert().
  */
 function material_inventory_totals_entity_insert(EntityInterface $entity): void {
+  if ($entity instanceof NodeInterface && $entity->bundle() === 'material') {
+    material_inventory_totals_refresh_material_value($entity);
+  }
+
   if (!material_inventory_totals_supports_entity($entity)) {
     return;
   }
@@ -45,6 +50,11 @@ function material_inventory_totals_entity_insert(EntityInterface $entity): void 
  * Implements hook_entity_update().
  */
 function material_inventory_totals_entity_update(EntityInterface $entity): void {
+  if ($entity instanceof NodeInterface && $entity->bundle() === 'material') {
+    $original = $entity->original instanceof NodeInterface ? $entity->original : NULL;
+    material_inventory_totals_refresh_material_value($entity, $original);
+  }
+
   if (!material_inventory_totals_supports_entity($entity)) {
     return;
   }
@@ -144,4 +154,26 @@ function material_inventory_totals_extract_quantity(ContentEntityInterface $enti
  */
 function material_inventory_totals_calculator(): InventoryTotalsCalculator {
   return \Drupal::service('material_inventory_totals.calculator');
+}
+
+/**
+ * Recalculate cached totals when a material node changes pricing inputs.
+ */
+function material_inventory_totals_refresh_material_value(NodeInterface $material, ?NodeInterface $original = NULL): void {
+  if (!$material->hasField('field_material_sales_cost')) {
+    return;
+  }
+
+  $current_cost = $material->get('field_material_sales_cost')->value;
+  $previous_cost = NULL;
+  if ($original && $original->hasField('field_material_sales_cost')) {
+    $previous_cost = $original->get('field_material_sales_cost')->value;
+  }
+
+  // For new materials recalc immediately; for updates only when cost changes.
+  if ($original && (string) $current_cost === (string) $previous_cost) {
+    return;
+  }
+
+  material_inventory_totals_calculator()->recalculate((int) $material->id());
 }

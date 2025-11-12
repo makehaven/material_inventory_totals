@@ -5,6 +5,7 @@ namespace Drupal\material_inventory_totals\Service;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Entity\Sql\SqlContentEntityStorageInterface;
 use Drupal\Core\Lock\LockBackendInterface;
 use Drupal\Core\Logger\LoggerChannelInterface;
 use Drupal\Core\State\StateInterface;
@@ -248,28 +249,48 @@ class InventoryTotalsCalculator {
   protected function persistTotals(NodeInterface $material, int $count): void {
     $formatted_value = $this->formatInventoryValue($material, $count);
 
+    $stored_count = $material->get('field_material_inventory_count')->value;
+    $stored_value = $material->get('field_material_inventory_value')->value;
+
+    $count_changed = (string) $stored_count !== (string) $count;
+    $value_changed = (string) $stored_value !== (string) $formatted_value;
+
+    if (!$count_changed && !$value_changed) {
+      return;
+    }
+
     $material->set('field_material_inventory_count', $count);
     $material->set('field_material_inventory_value', $formatted_value);
-
-    // Only save when values actually change to avoid unnecessary revisions.
-    if ($material->isDirty()) {
-      $material->save();
-    }
+    $material->save();
   }
 
   /**
    * Calculates quantity total for a material using adjustment entities.
    */
   protected function calculateQuantityFromAdjustments(int $material_id): int {
-    $query = $this->database->select('material_inventory__field_inventory_quantity_change', 'qty');
-    $query->addExpression('COALESCE(SUM(qty.field_inventory_quantity_change_value), 0)', 'quantity_total');
-    $query->join('material_inventory__field_inventory_ref_material', 'ref', 'qty.entity_id = ref.entity_id AND qty.langcode = ref.langcode');
-    $query->join('material_inventory_field_data', 'base', 'qty.entity_id = base.id AND qty.langcode = base.langcode');
+    if (!$this->inventoryStorage instanceof SqlContentEntityStorageInterface) {
+      return $this->calculateQuantityFromEntities($material_id);
+    }
+
+    $table_mapping = $this->inventoryStorage->getTableMapping();
+
+    $quantity_table = $table_mapping->getFieldTableName('field_inventory_quantity_change');
+    $quantity_column = $table_mapping->getFieldColumnName('field_inventory_quantity_change', 'value');
+    $reference_table = $table_mapping->getFieldTableName('field_inventory_ref_material');
+    $reference_column = $table_mapping->getFieldColumnName('field_inventory_ref_material', 'target_id');
+    $base_table = $table_mapping->getBaseTable();
+
+    $query = $this->database->select($quantity_table, 'qty');
+    $query->addExpression(sprintf('COALESCE(SUM(qty.%s), 0)', $quantity_column), 'quantity_total');
+    // Field translations can have mismatched langcodes across storage tables when
+    // a field is not translatable, so join strictly on entity IDs.
+    $query->join($reference_table, 'ref', 'qty.entity_id = ref.entity_id');
+    $query->join($base_table, 'base', 'qty.entity_id = base.id');
     $query->condition('base.type', 'inventory_adjustment');
     $query->condition('qty.deleted', 0);
     $query->condition('ref.deleted', 0);
     $query->condition('base.deleted', 0);
-    $query->condition('ref.field_inventory_ref_material_target_id', $material_id);
+    $query->condition(sprintf('ref.%s', $reference_column), $material_id);
 
     $result = $query->execute()->fetchField();
     return (int) $result;
@@ -311,5 +332,28 @@ class InventoryTotalsCalculator {
    */
   protected function getLockName(int $material_id): string {
     return 'material_inventory_totals:' . $material_id;
+  }
+
+  /**
+   * Fallback calculator for non-SQL storage backends.
+   */
+  protected function calculateQuantityFromEntities(int $material_id): int {
+    $query = $this->inventoryStorage->getQuery()
+      ->condition('type', 'inventory_adjustment')
+      ->condition('field_inventory_ref_material', $material_id)
+      ->accessCheck(FALSE);
+
+    $entity_ids = $query->execute();
+    if (empty($entity_ids)) {
+      return 0;
+    }
+
+    $adjustments = $this->inventoryStorage->loadMultiple($entity_ids);
+    $sum = 0;
+    foreach ($adjustments as $adjustment) {
+      $sum += (int) $adjustment->get('field_inventory_quantity_change')->value;
+    }
+
+    return $sum;
   }
 }
