@@ -51,8 +51,7 @@ function material_inventory_totals_entity_insert(EntityInterface $entity): void 
  */
 function material_inventory_totals_entity_update(EntityInterface $entity): void {
   if ($entity instanceof NodeInterface && $entity->bundle() === 'material') {
-    $original = $entity->original instanceof NodeInterface ? $entity->original : NULL;
-    material_inventory_totals_refresh_material_value($entity, $original);
+    material_inventory_totals_refresh_material_value($entity);
   }
 
   if (!material_inventory_totals_supports_entity($entity)) {
@@ -157,23 +156,8 @@ function material_inventory_totals_calculator(): InventoryTotalsCalculator {
 }
 
 /**
- * Recalculate cached totals when a material node changes pricing inputs.
+ * Recalculate cached totals when a material node is updated.
  */
-function material_inventory_totals_refresh_material_value(NodeInterface $material, ?NodeInterface $original = NULL): void {
-  if (!$material->hasField('field_material_sales_cost')) {
-    return;
-  }
-
-  $current_cost = $material->get('field_material_sales_cost')->value;
-  $previous_cost = NULL;
-  if ($original && $original->hasField('field_material_sales_cost')) {
-    $previous_cost = $original->get('field_material_sales_cost')->value;
-  }
-
-  // For new materials recalc immediately; for updates only when cost changes.
-  if ($original && (string) $current_cost === (string) $previous_cost) {
-    return;
-  }
-
+function material_inventory_totals_refresh_material_value(NodeInterface $material): void {
   material_inventory_totals_calculator()->recalculate((int) $material->id());
 }
