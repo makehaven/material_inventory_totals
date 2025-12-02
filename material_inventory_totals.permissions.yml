@@ -1,0 +1,5 @@
+# web/modules/custom/material_inventory_totals/material_inventory_totals.permissions.yml
+update material inventory counts:
+  title: 'Update material inventory counts'
+  description: 'Allow users to update the total count for material inventory items.'
+  restrict access: true

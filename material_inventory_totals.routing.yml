@@ -1,0 +1,14 @@
+material_inventory_totals.inventory_count:
+  path: '/admin/material/{node}/inventory-count'
+  defaults:
+    _form: '\Drupal\material_inventory_totals\Form\InventoryCountForm'
+    _title: 'Update Inventory Count'
+  requirements:
+    _permission: 'update material inventory counts'
+    _entity_access: 'node.update'
+    _custom_access: '\Drupal\material_inventory_totals\Form\InventoryCountForm::access'
+    node: \d+
+  options:
+    parameters:
+      node:
+        type: 'entity:node'

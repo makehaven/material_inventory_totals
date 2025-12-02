@@ -1,0 +1,6 @@
+# web/modules/custom/material_inventory_totals/material_inventory_totals.links.task.yml
+material_inventory_totals.inventory_count_tab:
+  route_name: material_inventory_totals.inventory_count
+  title: 'Inventory Count'
+  base_route: entity.node.canonical
+  weight: 10
