@@ -12,3 +12,11 @@ material_inventory_totals.inventory_count:
     parameters:
       node:
         type: 'entity:node'
+
+material_inventory_totals.store_stats:
+  path: '/store/stats'
+  defaults:
+    _controller: '\Drupal\material_inventory_totals\Controller\StoreStatsController::content'
+    _title: 'Store Statistics'
+  requirements:
+    _permission: 'view material inventory stats'
