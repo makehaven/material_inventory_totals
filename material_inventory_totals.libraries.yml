@@ -1,0 +1,5 @@
+store_stats:
+  version: 1.x
+  css:
+    theme:
+      css/store-stats.css: {}

@@ -11,6 +11,20 @@ use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
 use Drupal\node\NodeInterface;
 
 /**
+ * Implements hook_theme().
+ */
+function material_inventory_totals_theme($existing, $type, $theme, $path): array {
+  return [
+    'material_inventory_store_stats' => [
+      'variables' => [
+        'stats' => [],
+      ],
+      'template' => 'material-inventory-store-stats',
+    ],
+  ];
+}
+
+/**
  * Implements hook_cron().
  */
 function material_inventory_totals_cron(): void {
