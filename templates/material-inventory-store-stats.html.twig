@@ -1,0 +1,364 @@
+{#
+/**
+ * @file
+ * Dashboard template for store/material inventory statistics.
+ */
+#}
+
+{% set sales_available = stats.sales.available ?? false %}
+{% set inventory_available = stats.inventory.available ?? false %}
+{% set generated = stats.generated ?? 'now' %}
+
+<div class="store-stats-dashboard">
+  <header class="store-stats-header">
+    <p class="text-muted text-uppercase small mb-2">{{ 'Material Store'|t }}</p>
+    <div class="d-flex flex-wrap gap-3 align-items-end justify-content-between">
+      <div>
+        <h1 class="store-stats-header-title">{{ 'Store statistics'|t }}</h1>
+        <p class="text-secondary mb-0">{{ 'Operational snapshot of revenue velocity, demand, and on-hand stock.'|t }}</p>
+      </div>
+      <div class="text-end">
+        <div class="text-muted small text-uppercase">{{ 'Last updated'|t }}</div>
+        <div class="fw-bold">{{ generated|date('M j, Y g:ia T') }}</div>
+      </div>
+    </div>
+  </header>
+
+  {% if not sales_available and not inventory_available %}
+    <div class="store-stats-empty">{{ 'Inventory metrics will appear once adjustments and materials have been recorded.'|t }}</div>
+  {% endif %}
+
+  {% if sales_available %}
+    <section class="store-stats-section">
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+          <h2 class="mb-1">{{ 'Sales performance'|t }}</h2>
+          <p class="lead mb-0">{{ 'Compare lifetime totals against rolling 30 and 7 day periods.'|t }}</p>
+        </div>
+        <span class="store-stats-pill">{{ 'Live adjustments feed'|t }}</span>
+      </div>
+
+      {% set summary_cards = [
+        {
+          title: 'Lifetime performance'|t,
+          description: 'Since tracking began'|t,
+          data: stats.sales.overall|default({})
+        },
+        {
+          title: 'Last 30 days'|t,
+          description: 'Rolling monthly window'|t,
+          data: stats.sales.last_30_days|default({})
+        },
+        {
+          title: 'Last 7 days'|t,
+          description: 'Week over week'|t,
+          data: stats.sales.last_7_days|default({})
+        }
+      ] %}
+
+      <div class="store-stats-card-grid">
+        {% for card in summary_cards %}
+          {% set data = card.data %}
+          <article class="store-stats-card {{ loop.first ? 'kpi-highlight text-white' }}">
+            <div class="eyebrow small text-uppercase">{{ card.title }}</div>
+            <div class="store-stats-kpi-value">
+              {{ '$' ~ (data.revenue|default(0))|number_format(2, '.', ',') }}
+            </div>
+            <div class="store-stats-kpi-secondary">
+              {{ '@units units · @orders orders'|t({
+                '@units': data.items|default(0)|number_format(0, '.', ','),
+                '@orders': data.transactions|default(0)|number_format(0, '.', ',')
+              }) }}
+            </div>
+            <div class="store-stats-kpi-secondary">
+              {{ 'Avg item'|t }}: {{ '$' ~ (data.avg_item_value|default(0))|number_format(2, '.', ',') }} ·
+              {{ 'Avg sale'|t }}: {{ '$' ~ (data.avg_transaction_value|default(0))|number_format(2, '.', ',') }}
+            </div>
+            <p class="store-stats-kpi-secondary mb-0">{{ card.description }}</p>
+          </article>
+        {% endfor %}
+      </div>
+
+      <div class="store-stats-grid-2 store-stats-section">
+        <div class="store-stats-panel">
+          <h3 class="h5 mb-3">{{ 'Top materials (all time)'|t }}</h3>
+          {% set top_materials = stats.sales.top_materials|default([]) %}
+          {% if top_materials %}
+            <table class="store-stats-table">
+              <thead>
+                <tr>
+                  <th scope="col">{{ 'Material'|t }}</th>
+                  <th scope="col" class="text-end">{{ 'Units'|t }}</th>
+                  <th scope="col" class="text-end">{{ 'Revenue'|t }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for material in top_materials %}
+                  <tr>
+                    <td>{{ material.name }}</td>
+                    <td class="text-end">{{ material.quantity|number_format(0, '.', ',') }}</td>
+                    <td class="text-end">{{ '$' ~ material.revenue|number_format(2, '.', ',') }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <p class="store-stats-empty">{{ 'Sales have not been recorded yet.'|t }}</p>
+          {% endif %}
+        </div>
+        <div class="store-stats-panel">
+          <h3 class="h5 mb-3">{{ 'Top materials (30 days)'|t }}</h3>
+          {% set top_materials_recent = stats.sales.top_materials_recent|default([]) %}
+          {% if top_materials_recent %}
+            <table class="store-stats-table">
+              <thead>
+                <tr>
+                  <th scope="col">{{ 'Material'|t }}</th>
+                  <th scope="col" class="text-end">{{ 'Units'|t }}</th>
+                  <th scope="col" class="text-end">{{ 'Revenue'|t }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for material in top_materials_recent %}
+                  <tr>
+                    <td>{{ material.name }}</td>
+                    <td class="text-end">{{ material.quantity|number_format(0, '.', ',') }}</td>
+                    <td class="text-end">{{ '$' ~ material.revenue|number_format(2, '.', ',') }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <p class="store-stats-empty">{{ 'No sales were recorded in the last month.'|t }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="store-stats-grid-2 store-stats-section">
+        <div class="store-stats-panel">
+          <h3 class="h5 mb-3">{{ 'Recent sales activity'|t }}</h3>
+          {% set recent_activity = stats.sales.recent_activity|default([]) %}
+          {% if recent_activity %}
+            <table class="store-stats-table">
+              <thead>
+                <tr>
+                  <th scope="col">{{ 'Material'|t }}</th>
+                  <th scope="col" class="text-end">{{ 'Units'|t }}</th>
+                  <th scope="col" class="text-end">{{ 'Unit price'|t }}</th>
+                  <th scope="col" class="text-end">{{ 'Line total'|t }}</th>
+                  <th scope="col">{{ 'Recorded'|t }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for activity in recent_activity %}
+                  <tr>
+                    <td>{{ activity.name }}</td>
+                    <td class="text-end">{{ activity.quantity|number_format(0, '.', ',') }}</td>
+                    <td class="text-end">{{ '$' ~ activity.unit_price|number_format(2, '.', ',') }}</td>
+                    <td class="text-end">{{ '$' ~ activity.total|number_format(2, '.', ',') }}</td>
+                    <td>{{ activity.timestamp|date('M j, g:ia') }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <p class="store-stats-empty">{{ 'No recent adjustments were found.'|t }}</p>
+          {% endif %}
+        </div>
+        <div class="store-stats-panel">
+          <h3 class="h5 mb-3">{{ 'Daily trend (last 30 days)'|t }}</h3>
+          {% set trend = stats.sales.trend|default({}) %}
+          {% if trend.points|default([]) %}
+            {% set max_trend = trend.max|default(0) %}
+            <div class="store-stats-trend-chart">
+              {% for point in trend.points %}
+                {% set height = max_trend > 0 ? (point.items / max_trend * 100) : 0 %}
+                <div class="store-stats-trend-bar">
+                  <div class="bar" style="height: {{ height }}%"></div>
+                  <span class="fw-semibold">{{ point.items }}</span>
+                  <span>{{ point.date|date('M j') }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="store-stats-empty">{{ 'No sales have been logged in the last month.'|t }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="store-stats-panel store-stats-section">
+        <h3 class="h5 mb-3">{{ 'Monthly purchases (completed months)'|t }}</h3>
+        {% set monthly_series = stats.sales.monthly_purchases.points|default([]) %}
+        {% set monthly_max = stats.sales.monthly_purchases.max_transactions|default(0) %}
+        {% if monthly_series %}
+          {% set point_count = monthly_series|length %}
+          {% set polyline_points = [] %}
+          {% set circle_points = [] %}
+          {% for month in monthly_series %}
+            {% set x = point_count > 1 ? (loop.index0 / (point_count - 1) * 100) : 0 %}
+            {% set y = monthly_max > 0 ? (100 - (month.transactions / monthly_max * 100)) : 100 %}
+            {% set polyline_points = polyline_points|merge([(x|number_format(2, '.', '')) ~ ',' ~ (y|number_format(2, '.', ''))]) %}
+            {% set circle_points = circle_points|merge([{'x': x, 'y': y, 'value': month.transactions|default(0), 'label': month.label, 'units': month.items|default(0)}]) %}
+          {% endfor %}
+
+          <div class="store-stats-line-chart-wrapper">
+            <svg class="store-stats-line-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="{{ 'Monthly purchase trend'|t }}">
+              <polyline points="{{ polyline_points|join(' ') }}" />
+              {% for point in circle_points %}
+                <circle cx="{{ point.x }}" cy="{{ point.y }}" r="1.8">
+                  <title>{{ '@transactions purchases in @label (@units units)'|t({
+                    '@transactions': point.value|number_format(0, '.', ','),
+                    '@label': point.label,
+                    '@units': point.units|number_format(0, '.', ',')
+                  }) }}</title>
+                </circle>
+              {% endfor %}
+            </svg>
+            <ul class="store-stats-line-chart-axis">
+              {% for point in monthly_series %}
+                <li>
+                  <span class="text-muted small">{{ point.label }}</span>
+                  <strong>{{ point.transactions|default(0)|number_format(0, '.', ',') }}</strong>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+          <p class="small text-muted mb-2">{{ 'Trend excludes the current partial month.'|t }}</p>
+          <div class="store-stats-table-wrapper">
+            <table class="store-stats-table compact">
+              <thead>
+                <tr>
+                  <th scope="col">{{ 'Month'|t }}</th>
+                  <th scope="col" class="text-end">{{ 'Purchases'|t }}</th>
+                  <th scope="col" class="text-end">{{ 'Units moved'|t }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for point in monthly_series %}
+                  <tr>
+                    <td>{{ point.label }}</td>
+                    <td class="text-end">{{ point.transactions|default(0)|number_format(0, '.', ',') }}</td>
+                    <td class="text-end">{{ point.items|default(0)|number_format(0, '.', ',') }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="store-stats-empty">{{ 'Not enough completed months to display purchases.'|t }}</p>
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% if inventory_available %}
+    <section class="store-stats-section">
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+          <h2 class="mb-1">{{ 'Inventory pulse'|t }}</h2>
+          <p class="lead mb-0">{{ 'Live counts pulled from cached material inventory values.'|t }}</p>
+        </div>
+        <span class="store-stats-pill">{{ 'On-hand snapshot'|t }}</span>
+      </div>
+
+      {% set snapshot = stats.inventory.snapshot|default({}) %}
+      <div class="store-stats-card-grid">
+        <article class="store-stats-card">
+          <div class="eyebrow small text-uppercase">{{ 'Materials'|t }}</div>
+          <div class="store-stats-kpi-value">{{ snapshot.material_count|default(0)|number_format(0, '.', ',') }}</div>
+          <p class="store-stats-kpi-secondary mb-0">{{ 'Active products with inventory tracking enabled.'|t }}</p>
+        </article>
+        <article class="store-stats-card">
+          <div class="eyebrow small text-uppercase">{{ 'Units on hand'|t }}</div>
+          <div class="store-stats-kpi-value">{{ snapshot.unit_count|default(0)|number_format(0, '.', ',') }}</div>
+          <p class="store-stats-kpi-secondary mb-0">{{ 'Calculated from recent adjustments.'|t }}</p>
+        </article>
+        <article class="store-stats-card">
+          <div class="eyebrow small text-uppercase">{{ 'Inventory value'|t }}</div>
+          <div class="store-stats-kpi-value">{{ '$' ~ snapshot.inventory_value|default(0)|number_format(2, '.', ',') }}</div>
+          <p class="store-stats-kpi-secondary mb-0">{{ 'Approximate retail value of remaining stock.'|t }}</p>
+        </article>
+        <article class="store-stats-card">
+          <div class="eyebrow small text-uppercase">{{ 'Avg unit value'|t }}</div>
+          <div class="store-stats-kpi-value">{{ '$' ~ snapshot.avg_unit_value|default(0)|number_format(2, '.', ',') }}</div>
+          <p class="store-stats-kpi-secondary mb-0">{{ '@count materials currently out of stock'|t({'@count': snapshot.out_of_stock|default(0)|number_format(0, '.', ',')}) }}</p>
+        </article>
+      </div>
+
+      <div class="store-stats-panel store-stats-section">
+        <h3 class="h5 mb-3">{{ 'Materials to watch'|t }}</h3>
+        {% set low_stock = stats.inventory.low_stock|default([]) %}
+        {% if low_stock %}
+          <table class="store-stats-table">
+            <thead>
+              <tr>
+                <th scope="col">{{ 'Material'|t }}</th>
+                <th scope="col" class="text-end">{{ 'On hand'|t }}</th>
+                <th scope="col" class="text-end">{{ 'Unit price'|t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for material in low_stock %}
+                <tr>
+                  <td>{{ material.name }}</td>
+                  <td class="text-end">{{ material.on_hand|number_format(0, '.', ',') }}</td>
+                  <td class="text-end">{{ '$' ~ material.unit_price|number_format(2, '.', ',') }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="store-stats-empty">{{ 'No low inventory alerts at the moment.'|t }}</p>
+        {% endif %}
+      </div>
+
+      {% set reason_quarters = stats.inventory.reason_quarters|default([]) %}
+      {% if reason_quarters %}
+        <div class="store-stats-panel store-stats-section">
+          <h3 class="h5 mb-3">{{ 'Quarterly adjustment reasons'|t }}</h3>
+          <div class="store-stats-card-grid">
+            {% for quarter in reason_quarters %}
+              <article class="store-stats-card">
+                <div class="eyebrow small text-uppercase">{{ quarter.label }}</div>
+                <p class="store-stats-kpi-secondary mb-3">
+                  {{ '@items units across @count adjustments'|t({
+                    '@items': quarter.totals.items|default(0)|number_format(0, '.', ','),
+                    '@count': quarter.totals.transactions|default(0)|number_format(0, '.', ',')
+                  }) }}
+                </p>
+                {% set active_reasons = [] %}
+                {% for reason in quarter.reasons %}
+                  {% if reason.transactions > 0 or reason.items > 0 %}
+                    {% set active_reasons = active_reasons|merge([reason]) %}
+                  {% endif %}
+                {% endfor %}
+                {% if active_reasons %}
+                  <table class="store-stats-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">{{ 'Reason'|t }}</th>
+                        <th scope="col" class="text-end">{{ 'Units'|t }}</th>
+                        <th scope="col" class="text-end">{{ 'Entries'|t }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for reason in active_reasons %}
+                        <tr>
+                          <td>{{ reason.label }}</td>
+                          <td class="text-end">{{ reason.items|number_format(0, '.', ',') }}</td>
+                          <td class="text-end">{{ reason.transactions|number_format(0, '.', ',') }}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                {% else %}
+                  <p class="store-stats-empty mb-0">{{ 'No adjustments recorded this quarter.'|t }}</p>
+                {% endif %}
+              </article>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    </section>
+  {% endif %}
+</div>

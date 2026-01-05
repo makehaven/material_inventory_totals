@@ -3,3 +3,7 @@ update material inventory counts:
   title: 'Update material inventory counts'
   description: 'Allow users to update the total count for material inventory items.'
   restrict access: true
+
+view material inventory stats:
+  title: 'View material inventory stats'
+  description: 'Allow users to view the store statistics dashboard.'

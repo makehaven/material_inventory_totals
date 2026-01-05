@@ -1,0 +1,62 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the material_inventory_totals module.
+ */
+
+use Drupal\field\Entity\FieldStorageConfig;
+use Drupal\field\Entity\FieldConfig;
+
+/**
+ * Implements hook_update_N().
+ *
+ * Create the missing field table for field_inventory_quantity_change.
+ */
+function material_inventory_totals_update_9001() {
+  // Create the field storage if it doesn't exist.
+  if (!FieldStorageConfig::loadByName('material_inventory', 'field_inventory_quantity_change')) {
+    FieldStorageConfig::create([
+      'field_name' => 'field_inventory_quantity_change',
+      'entity_type' => 'material_inventory',
+      'type' => 'integer',
+      'settings' => [
+        'unsigned' => FALSE,
+        'size' => 'normal',
+      ],
+      'module' => 'core',
+      'locked' => FALSE,
+      'cardinality' => 1,
+      'translatable' => TRUE,
+      'indexes' => [],
+      'persist_with_no_fields' => FALSE,
+      'custom_storage' => FALSE,
+    ])->save();
+  }
+
+  // Create the field instance if it doesn't exist.
+  if (!FieldConfig::loadByName('material_inventory', 'inventory_adjustment', 'field_inventory_quantity_change')) {
+    FieldConfig::create([
+      'field_name' => 'field_inventory_quantity_change',
+      'entity_type' => 'material_inventory',
+      'bundle' => 'inventory_adjustment',
+      'label' => 'Inventory Quantity Change',
+      'description' => 'Any removing of items (sales,  loss or usage) should be a negative number.',
+      'required' => TRUE,
+      'translatable' => FALSE,
+      'default_value' => [
+        [
+          'value' => 0,
+        ],
+      ],
+      'default_value_callback' => '',
+      'settings' => [
+        'min' => NULL,
+        'max' => NULL,
+        'prefix' => '',
+        'suffix' => '',
+      ],
+      'field_type' => 'integer',
+    ])->save();
+  }
+}
