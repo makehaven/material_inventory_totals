@@ -75,21 +75,86 @@ class InventoryCountForm extends FormBase {
     $form_state->set('material_node', $node);
 
     // Get current count using the calculator for accuracy, or fallback to field.
-    // Recalculate checks the consistency.
     $summary = $this->calculator->recalculate((int) $node->id(), FALSE);
     $current_count = $summary['calculated_count'] ?? 0;
 
-    $form['title'] = [
-      '#type' => 'item',
-      '#title' => $this->t('Material'),
-      '#markup' => $node->label(),
+    $form['inventory_header'] = [
+      '#type' => 'markup',
+      '#markup' => '<h4 class="mt-2 mb-3">' . $this->t('Inventory Update: @label', ['@label' => $node->label()]) . '</h4>',
     ];
 
-    $form['current_count_display'] = [
-      '#type' => 'item',
-      '#title' => $this->t('Current System Count'),
-      '#markup' => $current_count,
+    // Check for last inventory adjustment.
+    $storage = $this->entityTypeManager->getStorage('material_inventory');
+    $query = $storage->getQuery()
+      ->condition('field_inventory_ref_material', $node->id())
+      ->condition('type', 'inventory_adjustment')
+      ->sort('created', 'DESC')
+      ->range(0, 1)
+      ->accessCheck(FALSE);
+    $ids = $query->execute();
+    
+    $last_check_text = $this->t('Never');
+    if (!empty($ids)) {
+      $last_entity = $storage->load(reset($ids));
+      /** @var \Drupal\Core\Datetime\DateFormatterInterface $date_formatter */
+      $date_formatter = \Drupal::service('date.formatter');
+      $ago = $date_formatter->formatTimeDiffSince($last_entity->get('created')->value);
+      $last_check_text = $this->t('@time ago', ['@time' => $ago]);
+    }
+
+    $form['info_row'] = [
+      '#type' => 'container',
+      '#attributes' => ['class' => ['row', 'mb-2']],
     ];
+
+    $form['info_row']['last_inventory_check'] = [
+      '#type' => 'item',
+      '#title' => $this->t('Last Checked'),
+      '#markup' => '<strong>' . $last_check_text . '</strong>',
+      '#wrapper_attributes' => ['class' => ['col-sm-6']],
+    ];
+
+    $form['info_row']['current_count_display'] = [
+      '#type' => 'item',
+      '#title' => $this->t('System Count'),
+      '#markup' => '<strong>' . $current_count . '</strong>',
+      '#wrapper_attributes' => ['class' => ['col-sm-6']],
+    ];
+
+    // Check for items in pending tabs.
+    $pending_qty = 0;
+    try {
+      if (\Drupal::entityTypeManager()->hasDefinition('material_transaction')) {
+        $trans_storage = \Drupal::entityTypeManager()->getStorage('material_transaction');
+        $t_query = $trans_storage->getQuery()
+          ->condition('field_material_ref', $node->id())
+          ->condition('field_transaction_status', 'pending')
+          ->accessCheck(FALSE);
+        $t_ids = $t_query->execute();
+        if (!empty($t_ids)) {
+          foreach ($trans_storage->loadMultiple($t_ids) as $t) {
+            $pending_qty += (int) $t->get('field_quantity')->value;
+          }
+        }
+      }
+    } catch (\Exception $e) {}
+
+    if ($pending_qty > 0) {
+      $form['tab_notice'] = [
+        '#type' => 'markup',
+        '#markup' => '<div class="alert alert-secondary py-1 mb-3" style="font-size: 0.9em;">' . 
+                     $this->t('Note: <strong>@qty</strong> additional items are currently in member tabs (already deducted from system count).', ['@qty' => $pending_qty]) . 
+                     '</div>',
+      ];
+    }
+
+    if ($node->hasField('field_material_backstock') && !$node->get('field_material_backstock')->isEmpty()) {
+       $backstock_location = $node->get('field_material_backstock')->value;
+       $form['backstock_alert'] = [
+         '#type' => 'markup',
+         '#markup' => '<div class="alert alert-info py-2" role="alert" style="border-left: 5px solid #0dcaf0; background-color: #cff4fc; margin-bottom: 15px;"><strong>' . $this->t('⚠️ CHECK BACKSTOCK') . '</strong>: ' . $this->t('@loc', ['@loc' => $backstock_location]) . '</div>',
+       ];
+    }
 
     $user_input = $form_state->getUserInput();
     if ($user_input && array_key_exists('total_count', $user_input) && $user_input['total_count'] !== '') {
@@ -104,13 +169,16 @@ class InventoryCountForm extends FormBase {
     $form['total_count'] = [
       '#type' => 'number',
       '#title' => $this->t('Actual Count (Total)'),
-      '#description' => $this->t('Enter the total number of items physically present. Positive corrections usually mean a missed restock entry.'),
       '#required' => TRUE,
       '#default_value' => $total_input,
+      '#attributes' => [
+        'class' => ['form-control-lg'],
+        'autofocus' => 'autofocus',
+      ],
       '#ajax' => [
         'callback' => '::ajaxRefreshCorrections',
         'wrapper' => 'material-inventory-corrections',
-        'event' => 'input',
+        'event' => 'change',
       ],
     ];
 
@@ -124,12 +192,7 @@ class InventoryCountForm extends FormBase {
     if ($is_positive_correction) {
       $form['correction_guidance']['restock_notice'] = [
         '#type' => 'item',
-        '#title' => $this->t('Inventory corrections'),
-        '#markup' => $this->t('Positive corrections usually indicate a missed restock entry. Confirm any restocks were entered and explain the correction below.'),
-        '#wrapper_attributes' => [
-          'class' => ['material-inventory-alert', 'alert', 'alert-warning', 'mb-3'],
-          'role' => 'alert',
-        ],
+        '#markup' => '<div class="alert alert-warning py-1 mt-2 mb-2" role="alert">' . $this->t('Positive correction: ensure any recent restocks were already entered.') . '</div>',
       ];
     }
 
@@ -150,23 +213,25 @@ class InventoryCountForm extends FormBase {
     }
 
     $form['correction_guidance']['notes'] = [
-      '#type' => 'textarea',
+      '#type' => 'textfield',
       '#title' => $this->t('Notes'),
-      '#description' => $this->t('Optional notes about this adjustment. Help future reviewers understand why the inventory changed.'),
+      '#title_display' => 'invisible',
       '#default_value' => $notes_default,
       '#attributes' => [
-        'placeholder' => $is_positive_correction ? $this->t('Inventory correction: explain why the count increased.') : '',
+        'placeholder' => $this->t('Optional notes...'),
       ],
     ];
 
     $form['actions'] = [
       '#type' => 'actions',
+      '#attributes' => ['class' => ['mt-3']],
     ];
 
     $form['actions']['submit'] = [
       '#type' => 'submit',
-      '#value' => $this->t('Update Inventory'),
+      '#value' => $this->t('Save Count'),
       '#button_type' => 'primary',
+      '#attributes' => ['class' => ['btn-lg', 'w-100']],
     ];
 
     return $form;
@@ -200,12 +265,14 @@ class InventoryCountForm extends FormBase {
     $current_count = $summary['calculated_count'] ?? (int) $node->get('field_material_inventory_count')->value;
     $new_total = (int) $form_state->getValue('total_count');
     $delta = $new_total - $current_count;
-    $reason = $delta < 0 ? 'lossage' : 'other';
-
+    
     if ($delta === 0) {
-      $this->messenger()->addStatus($this->t('No changes made to inventory (counts match).'));
-      $form_state->setRedirect('entity.node.canonical', ['node' => $node->id()]);
-      return;
+      $reason = 'verification';
+      $msg = $this->t('Inventory verified. No changes needed.');
+    }
+    else {
+      $reason = $delta < 0 ? 'lossage' : 'other';
+      $msg = $this->t('Inventory updated. Adjustment: @delta.', ['@delta' => $delta > 0 ? '+' . $delta : $delta]);
     }
 
     try {
@@ -218,11 +285,17 @@ class InventoryCountForm extends FormBase {
       ]);
       $adjustment->save();
 
-      // The module hooks will handle the recalculation of the node field.
-      $this->messenger()->addStatus($this->t('Inventory updated. Adjustment: @delta.', ['@delta' => $delta > 0 ? '+' . $delta : $delta]));
+      $this->messenger()->addStatus($msg);
     }
     catch (\Exception $e) {
       $this->messenger()->addError($this->t('Failed to update inventory: @error', ['@error' => $e->getMessage()]));
+    }
+
+    // Redirect back to current page if it's not the canonical node view.
+    $route_name = \Drupal::routeMatch()->getRouteName();
+    if ($route_name !== 'entity.node.canonical') {
+      // If we are in a block or another page, stay there.
+      return;
     }
 
     $form_state->setRedirect('entity.node.canonical', ['node' => $node->id()]);
