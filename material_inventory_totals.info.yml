@@ -1,7 +1,7 @@
 name: 'Material Inventory Totals'
 type: module
 description: 'Maintains cached inventory counts and values for materials.'
-package: Custom
+package: Makerspace
 core_version_requirement: ^10 || ^11
 dependencies:
   - drupal:node
