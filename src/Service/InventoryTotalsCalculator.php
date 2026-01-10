@@ -235,7 +235,7 @@ class InventoryTotalsCalculator {
       return NULL;
     }
 
-    if (!$material->hasField('field_material_sales_cost')) {
+    if (!$material->hasField('field_material_unit_cost')) {
       $this->logger->warning('Material @nid is missing sales cost field; inventory value will default to zero.', [
         '@nid' => $material_id,
       ]);
@@ -300,11 +300,11 @@ class InventoryTotalsCalculator {
    * Formats the inventory value based on sales cost and quantity.
    */
   protected function formatInventoryValue(NodeInterface $material, int $quantity): string {
-    if (!$material->hasField('field_material_sales_cost')) {
+    if (!$material->hasField('field_material_unit_cost')) {
       return number_format(0, 2, '.', '');
     }
 
-    $sales_cost = $material->get('field_material_sales_cost')->value;
+    $sales_cost = $material->get('field_material_unit_cost')->value;
     if ($sales_cost === NULL || $sales_cost === '') {
       return '0.00';
     }
