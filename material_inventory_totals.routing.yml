@@ -1,3 +1,28 @@
+material_inventory_totals.api_get_item:
+  path: '/api/v1/inventory/item/{nid}'
+  defaults:
+    _controller: '\Drupal\material_inventory_totals\Controller\InventoryApiController::getItem'
+    _format: json
+  requirements:
+    _permission: 'update material inventory counts'
+    nid: \d+
+  methods: [GET]
+  options:
+    _auth:
+      - oauth2
+
+material_inventory_totals.api_submit_count:
+  path: '/api/v1/inventory/count'
+  defaults:
+    _controller: '\Drupal\material_inventory_totals\Controller\InventoryApiController::submitCount'
+    _format: json
+  requirements:
+    _permission: 'update material inventory counts'
+  methods: [POST]
+  options:
+    _auth:
+      - oauth2
+
 material_inventory_totals.inventory_count:
   path: '/admin/material/{node}/inventory-count'
   defaults:
