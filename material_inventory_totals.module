@@ -161,3 +161,34 @@ function material_inventory_totals_calculator(): InventoryTotalsCalculator {
 function material_inventory_totals_refresh_material_value(NodeInterface $material): void {
   material_inventory_totals_calculator()->recalculate((int) $material->id());
 }
+
+/**
+ * Adds field_material_last_inventoried timestamp field to material nodes.
+ */
+function material_inventory_totals_update_9001(): void {
+  $field_storage_config = \Drupal::entityTypeManager()
+    ->getStorage('field_storage_config');
+  $field_config = \Drupal::entityTypeManager()
+    ->getStorage('field_config');
+
+  if (!$field_storage_config->load('node.field_material_last_inventoried')) {
+    $field_storage_config->create([
+      'field_name' => 'field_material_last_inventoried',
+      'entity_type' => 'node',
+      'type' => 'timestamp',
+      'cardinality' => 1,
+      'translatable' => FALSE,
+    ])->save();
+  }
+
+  if (!$field_config->load('node.material.field_material_last_inventoried')) {
+    $field_config->create([
+      'field_name' => 'field_material_last_inventoried',
+      'entity_type' => 'node',
+      'bundle' => 'material',
+      'label' => 'Last Inventoried',
+      'description' => 'Timestamp of the most recent physical inventory count for this item.',
+      'required' => FALSE,
+    ])->save();
+  }
+}

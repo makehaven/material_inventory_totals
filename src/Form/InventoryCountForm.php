@@ -83,22 +83,12 @@ class InventoryCountForm extends FormBase {
       '#markup' => '<h4 class="mt-2 mb-3">' . $this->t('Inventory Update: @label', ['@label' => $node->label()]) . '</h4>',
     ];
 
-    // Check for last inventory adjustment.
-    $storage = $this->entityTypeManager->getStorage('material_inventory');
-    $query = $storage->getQuery()
-      ->condition('field_inventory_ref_material', $node->id())
-      ->condition('type', 'inventory_adjustment')
-      ->sort('created', 'DESC')
-      ->range(0, 1)
-      ->accessCheck(FALSE);
-    $ids = $query->execute();
-    
+    // Check for last physical inventory count from dedicated field.
     $last_check_text = $this->t('Never');
-    if (!empty($ids)) {
-      $last_entity = $storage->load(reset($ids));
+    if ($node->hasField('field_material_last_inventoried') && !$node->get('field_material_last_inventoried')->isEmpty()) {
       /** @var \Drupal\Core\Datetime\DateFormatterInterface $date_formatter */
       $date_formatter = \Drupal::service('date.formatter');
-      $ago = $date_formatter->formatTimeDiffSince($last_entity->get('created')->value);
+      $ago = $date_formatter->formatTimeDiffSince($node->get('field_material_last_inventoried')->value);
       $last_check_text = $this->t('@time ago', ['@time' => $ago]);
     }
 
@@ -152,7 +142,7 @@ class InventoryCountForm extends FormBase {
        $backstock_location = $node->get('field_material_backstock')->value;
        $form['backstock_alert'] = [
          '#type' => 'markup',
-         '#markup' => '<div class="alert alert-info py-2" role="alert" style="border-left: 5px solid #0dcaf0; background-color: #cff4fc; margin-bottom: 15px;"><strong>' . $this->t('⚠️ CHECK BACKSTOCK') . '</strong>: ' . $this->t('@loc', ['@loc' => $backstock_location]) . '</div>',
+         '#markup' => '<div class="alert alert-info py-2" role="alert" style="border-left: 5px solid #0dcaf0; background-color: #cff4fc; margin-bottom: 15px;"><strong>' . $this->t('⚠️ BACKSTOCK LOCATION') . '</strong>: ' . $this->t('@loc', ['@loc' => $backstock_location]) . '</div>',
        ];
     }
 
@@ -284,6 +274,12 @@ class InventoryCountForm extends FormBase {
         'field_inventory_change_memo' => $form_state->getValue('notes'),
       ]);
       $adjustment->save();
+
+      // Stamp last inventoried date on the material node.
+      if ($node->hasField('field_material_last_inventoried')) {
+        $node->set('field_material_last_inventoried', \Drupal::time()->getCurrentTime());
+        $node->save();
+      }
 
       $this->messenger()->addStatus($msg);
     }
