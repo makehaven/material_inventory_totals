@@ -130,7 +130,7 @@ class InventoryApiController extends ControllerBase {
       return new JsonResponse(['error' => 'Material not found.'], 404);
     }
 
-    if (!$node->access('update', $this->currentUser())) {
+    if (!$node->access('view', $this->currentUser())) {
       return new JsonResponse(['error' => 'Access denied.'], 403);
     }
 
