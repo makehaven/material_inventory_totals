@@ -275,7 +275,9 @@ class InventoryCountForm extends FormBase {
       ]);
       $adjustment->save();
 
-      // Stamp last inventoried date on the material node.
+      // Reload the node so the applyDelta() hook changes don't get overwritten,
+      // then stamp the last-inventoried date.
+      $node = $this->entityTypeManager->getStorage('node')->load($node->id());
       if ($node->hasField('field_material_last_inventoried')) {
         $node->set('field_material_last_inventoried', \Drupal::time()->getCurrentTime());
         $node->save();
