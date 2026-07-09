@@ -273,15 +273,10 @@ class InventoryCountForm extends FormBase {
         'field_inventory_change_reason' => $reason,
         'field_inventory_change_memo' => $form_state->getValue('notes'),
       ]);
+      // Saving the adjustment triggers material_inventory_totals_entity_insert(),
+      // which applies the delta and stamps field_material_last_inventoried on
+      // the material for physical-count reasons like these.
       $adjustment->save();
-
-      // Reload the node so the applyDelta() hook changes don't get overwritten,
-      // then stamp the last-inventoried date.
-      $node = $this->entityTypeManager->getStorage('node')->load($node->id());
-      if ($node->hasField('field_material_last_inventoried')) {
-        $node->set('field_material_last_inventoried', \Drupal::time()->getCurrentTime());
-        $node->save();
-      }
 
       $this->messenger()->addStatus($msg);
     }

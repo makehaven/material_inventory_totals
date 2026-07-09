@@ -11,6 +11,20 @@ use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
 use Drupal\node\NodeInterface;
 
 /**
+ * Adjustment reason codes that indicate a human physically checked stock.
+ *
+ * Automated or payment-driven reasons (sale, unpaid_tab, restock) and usage
+ * logs (internal, education, workshop_supplies, program_supplies, shop_use,
+ * office_use) are deliberately excluded so they do not masquerade as physical
+ * inventory counts.
+ */
+const MATERIAL_INVENTORY_TOTALS_PHYSICAL_COUNT_REASONS = [
+  'other',
+  'verification',
+  'lossage',
+];
+
+/**
  * Implements hook_cron().
  */
 function material_inventory_totals_cron(): void {
@@ -43,6 +57,13 @@ function material_inventory_totals_entity_insert(EntityInterface $entity): void 
 
   if ($material_id !== NULL && $quantity !== 0) {
     material_inventory_totals_calculator()->applyDelta($material_id, $quantity);
+  }
+
+  // Stamp the material's last-inventoried date when the adjustment reason
+  // indicates a human physically checked stock. Runs after applyDelta() so
+  // the freshly persisted totals are not overwritten.
+  if ($material_id !== NULL && material_inventory_totals_is_physical_count($content_entity)) {
+    material_inventory_totals_stamp_last_inventoried($material_id);
   }
 }
 
@@ -146,6 +167,39 @@ function material_inventory_totals_extract_quantity(ContentEntityInterface $enti
   }
 
   return (int) $entity->get('field_inventory_quantity_change')->value;
+}
+
+/**
+ * Determines whether an adjustment represents a physical stock check.
+ */
+function material_inventory_totals_is_physical_count(ContentEntityInterface $adjustment): bool {
+  if (!$adjustment->hasField('field_inventory_change_reason')) {
+    return FALSE;
+  }
+
+  $reason = $adjustment->get('field_inventory_change_reason')->value;
+  return in_array($reason, MATERIAL_INVENTORY_TOTALS_PHYSICAL_COUNT_REASONS, TRUE);
+}
+
+/**
+ * Stamps field_material_last_inventoried on a material node with "now".
+ *
+ * Saving the material re-enters material_inventory_totals_entity_update(),
+ * but that path only recalculates cached totals (which will not have changed)
+ * and never creates adjustment entities, so no recursion occurs.
+ */
+function material_inventory_totals_stamp_last_inventoried(int $material_id): void {
+  $material = \Drupal::entityTypeManager()->getStorage('node')->load($material_id);
+  if (!$material instanceof NodeInterface || $material->bundle() !== 'material') {
+    return;
+  }
+
+  if (!$material->hasField('field_material_last_inventoried')) {
+    return;
+  }
+
+  $material->set('field_material_last_inventoried', \Drupal::time()->getCurrentTime());
+  $material->save();
 }
 
 /**
