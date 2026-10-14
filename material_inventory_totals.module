@@ -5,8 +5,11 @@
  * Hooks for the Material Inventory Totals module.
  */
 
+use Drupal\Component\Utility\Html;
 use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Entity\EntityFormInterface;
 use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Form\FormStateInterface;
 use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
 use Drupal\node\NodeInterface;
 
@@ -216,6 +219,92 @@ function material_inventory_totals_calculator(): InventoryTotalsCalculator {
  */
 function material_inventory_totals_refresh_material_value(NodeInterface $material): void {
   material_inventory_totals_calculator()->recalculate((int) $material->id());
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter() for the inventory adjustment add form.
+ *
+ * A restock is when stock that did not fit on the shelf goes to backstock, so
+ * the restock form carries the material's backstock location. People who may
+ * edit field_material_backstock can change it here; others see it read-only,
+ * as on the count form.
+ */
+function material_inventory_totals_form_material_inventory_inventory_adjustment_form_alter(array &$form, FormStateInterface $form_state): void {
+  $form_object = $form_state->getFormObject();
+  if (!$form_object instanceof EntityFormInterface || !$form_object->getEntity()->isNew()) {
+    return;
+  }
+
+  $material_id = material_inventory_totals_extract_material_id($form_object->getEntity())
+    ?? (int) \Drupal::request()->query->get('material');
+  $material = $material_id ? \Drupal::entityTypeManager()->getStorage('node')->load($material_id) : NULL;
+  if (!$material instanceof NodeInterface || $material->bundle() !== 'material' || !$material->hasField('field_material_backstock')) {
+    return;
+  }
+
+  $backstock = $material->get('field_material_backstock');
+  $current = (string) ($backstock->value ?? '');
+  $restock_only = [
+    'visible' => [
+      ':input[name="field_inventory_change_reason"]' => ['value' => 'restock'],
+    ],
+  ];
+
+  if ($backstock->access('edit')) {
+    $form['material_backstock'] = [
+      '#type' => 'textfield',
+      '#title' => t('Backstock location'),
+      '#description' => t('Where the extra stock for @material is kept. Update it if you put stock somewhere new.', ['@material' => $material->label()]),
+      '#default_value' => $current,
+      '#maxlength' => 255,
+      '#weight' => 3,
+      '#states' => $restock_only,
+    ];
+    $form['material_backstock_nid'] = [
+      '#type' => 'value',
+      '#value' => (int) $material->id(),
+    ];
+    $form['actions']['submit']['#submit'][] = 'material_inventory_totals_save_backstock_location';
+  }
+  elseif ($current !== '' && $backstock->access('view')) {
+    $form['material_backstock'] = [
+      '#type' => 'item',
+      '#title' => t('Backstock location'),
+      '#markup' => Html::escape($current),
+      '#weight' => 3,
+      '#states' => $restock_only,
+    ];
+  }
+}
+
+/**
+ * Submit handler: writes the restock form's backstock location to the material.
+ */
+function material_inventory_totals_save_backstock_location(array &$form, FormStateInterface $form_state): void {
+  if ($form_state->getValue(['field_inventory_change_reason', 0, 'value']) !== 'restock') {
+    return;
+  }
+  $adjustment = $form_state->getFormObject()->getEntity();
+  $material_id = (int) $form_state->getValue('material_backstock_nid');
+  // The field was filled from one material; do not copy it onto another one
+  // if the person switched the material before saving.
+  if (material_inventory_totals_extract_material_id($adjustment) !== $material_id) {
+    return;
+  }
+  $material = \Drupal::entityTypeManager()->getStorage('node')->load($material_id);
+  if (!$material instanceof NodeInterface || !$material->get('field_material_backstock')->access('edit')) {
+    return;
+  }
+
+  $location = trim((string) $form_state->getValue('material_backstock'));
+  if ($location === (string) ($material->get('field_material_backstock')->value ?? '')) {
+    return;
+  }
+  $material->set('field_material_backstock', $location === '' ? NULL : $location);
+  $material->setNewRevision(TRUE);
+  $material->setRevisionLogMessage('Backstock location updated from the restock form.');
+  $material->save();
+  \Drupal::messenger()->addStatus(t('Backstock location for @material updated.', ['@material' => $material->label()]));
 }
 
 /**

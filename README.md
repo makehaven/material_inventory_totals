@@ -35,3 +35,7 @@ unlogged restocks cancel out real shrinkage. API clients read the choices from
 value back as `positive_reason`. The count form links to the restock entry form
 (the `inventory_adjustment` add form prefilled with `reason=restock`) so
 deliveries get logged before counting.
+
+The restock form shows the material's backstock location
+(`field_material_backstock`). People who can edit that field can change it there;
+others see it read-only, as on the count form.
