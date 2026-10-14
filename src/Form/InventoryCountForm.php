@@ -7,6 +7,8 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Session\AccountInterface;
+use Drupal\Core\Url;
+use Drupal\material_inventory_totals\CountReasons;
 use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
 use Drupal\node\NodeInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -83,6 +85,32 @@ class InventoryCountForm extends FormBase {
       '#markup' => '<h4 class="mt-2 mb-3">' . $this->t('Inventory Update: @label', ['@label' => $node->label()]) . '</h4>',
     ];
 
+    // Logging a delivery is a different job from counting: point people at
+    // it before they count, so restocks stop surfacing as count corrections.
+    $restock_url = Url::fromRoute('eck.entity.add', [
+      'eck_entity_type' => 'material_inventory',
+      'eck_entity_bundle' => 'inventory_adjustment',
+    ], [
+      'query' => [
+        'material' => $node->id(),
+        'reason' => 'restock',
+        'destination' => Url::fromRoute('<current>')->toString(),
+      ],
+    ]);
+    if ($restock_url->access()) {
+      $form['restock_link'] = [
+        '#type' => 'container',
+        '#attributes' => [
+          'class' => ['alert', 'alert-light', 'border', 'py-2', 'mb-3', 'material-inventory-restock-link'],
+        ],
+        'text' => [
+          '#markup' => $this->t('Putting out a delivery or backstock? <a href=":url" class="btn btn-sm btn-outline-primary ms-1">Log a restock</a> first, then count.', [
+            ':url' => $restock_url->toString(),
+          ]),
+        ],
+      ];
+    }
+
     // Check for last physical inventory count from dedicated field.
     $last_check_text = $this->t('Never');
     if ($node->hasField('field_material_last_inventoried') && !$node->get('field_material_last_inventoried')->isEmpty()) {
@@ -146,29 +174,23 @@ class InventoryCountForm extends FormBase {
        ];
     }
 
-    $user_input = $form_state->getUserInput();
-    if ($user_input && array_key_exists('total_count', $user_input) && $user_input['total_count'] !== '') {
-      $total_input = (int) $user_input['total_count'];
-    }
-    else {
-      $entered_total = $form_state->getValue('total_count');
-      $total_input = $entered_total !== NULL ? (int) $entered_total : $current_count;
-    }
-    $is_positive_correction = $total_input > $current_count;
+    $form['#attached']['library'][] = 'material_inventory_totals/inventory_count';
+    $form['#attributes']['data-system-count'] = $current_count;
 
+    // No server-side AJAX on this field: while a Drupal AJAX request is in
+    // flight the triggering input is disabled, so tapping Save straight after
+    // typing posted the form WITHOUT the count and recorded a false "verified,
+    // no change". The follow-up question is toggled client-side instead and
+    // enforced in validateForm().
     $form['total_count'] = [
       '#type' => 'number',
       '#title' => $this->t('Actual Count (Total)'),
       '#required' => TRUE,
-      '#default_value' => $total_input,
+      '#min' => 0,
+      '#default_value' => $current_count,
       '#attributes' => [
-        'class' => ['form-control-lg'],
+        'class' => ['form-control-lg', 'js-inventory-count-total'],
         'autofocus' => 'autofocus',
-      ],
-      '#ajax' => [
-        'callback' => '::ajaxRefreshCorrections',
-        'wrapper' => 'material-inventory-corrections',
-        'event' => 'change',
       ],
     ];
 
@@ -179,34 +201,41 @@ class InventoryCountForm extends FormBase {
       ],
     ];
 
-    if ($is_positive_correction) {
-      $form['correction_guidance']['restock_notice'] = [
-        '#type' => 'item',
-        '#markup' => '<div class="alert alert-warning py-1 mt-2 mb-2" role="alert">' . $this->t('Positive correction: ensure any recent restocks were already entered.') . '</div>',
-      ];
+    // Above the system count, the counter must say whether this is stock that
+    // arrived without a logged restock or stock that was already here.
+    // Lumping both together under "other" hid real shrinkage.
+    $options = [];
+    $descriptions = [];
+    foreach (CountReasons::positiveChoices() as $code => $choice) {
+      $options[$code] = $choice['label'];
+      $descriptions[$code] = ['#description' => $choice['help']];
     }
+    $form['correction_guidance']['positive'] = [
+      '#type' => 'container',
+      '#attributes' => ['class' => ['alert', 'alert-warning', 'py-2', 'mt-2', 'mb-2', 'js-inventory-count-positive']],
+    ];
+    $form['correction_guidance']['positive']['positive_reason'] = [
+      '#type' => 'radios',
+      '#title' => $this->t('Counted more than the system count? Say why.'),
+      '#description' => $this->t('Only needed when your count is higher than the system count.'),
+      '#options' => $options,
+    ] + $descriptions;
 
-    $notes_default = '';
-    $existing_notes = NULL;
-    if ($user_input && array_key_exists('notes', $user_input)) {
-      $existing_notes = $user_input['notes'];
-    }
-    elseif ($form_state->hasValue('notes')) {
-      $existing_notes = $form_state->getValue('notes');
-    }
-
-    if ($existing_notes !== NULL && $existing_notes !== '') {
-      $notes_default = $existing_notes;
-    }
-    elseif ($is_positive_correction) {
-      $notes_default = $this->t('Inventory correction: ');
-    }
+    $form['correction_guidance']['loss_notice'] = [
+      '#type' => 'html_tag',
+      '#tag' => 'div',
+      '#value' => $this->t('Fewer than the system count: the difference is recorded as loss.'),
+      '#attributes' => [
+        'class' => ['alert', 'alert-secondary', 'py-1', 'mt-2', 'mb-2', 'js-inventory-count-loss'],
+        'role' => 'status',
+        'hidden' => 'hidden',
+      ],
+    ];
 
     $form['correction_guidance']['notes'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Notes'),
       '#title_display' => 'invisible',
-      '#default_value' => $notes_default,
       '#attributes' => [
         'placeholder' => $this->t('Optional notes...'),
       ],
@@ -240,9 +269,25 @@ class InventoryCountForm extends FormBase {
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
+    // A missing count must never fall back to the default and be saved as a
+    // "no change" verification.
+    $input = $form_state->getUserInput();
+    if (!isset($input['total_count']) || $input['total_count'] === '') {
+      $form_state->setErrorByName('total_count', $this->t('Your count did not come through. Enter it again and press Save Count.'));
+      return;
+    }
+
     $new_total = $form_state->getValue('total_count');
     if (!is_numeric($new_total)) {
       $form_state->setErrorByName('total_count', $this->t('Count must be a number.'));
+      return;
+    }
+
+    $node = $form_state->get('material_node');
+    $summary = $this->calculator->recalculate((int) $node->id(), FALSE);
+    $delta = (int) $new_total - (int) ($summary['calculated_count'] ?? 0);
+    if ($delta > 0 && !isset(CountReasons::positiveChoices()[$form_state->getValue('positive_reason')])) {
+      $form_state->setErrorByName('positive_reason', $this->t("You counted @delta more than the system count. Choose whether that is a restock that wasn't logged or a count correction.", ['@delta' => $delta]));
     }
   }
 
@@ -256,12 +301,17 @@ class InventoryCountForm extends FormBase {
     $new_total = (int) $form_state->getValue('total_count');
     $delta = $new_total - $current_count;
     
+    $reason = CountReasons::forDelta($delta, $form_state->getValue('positive_reason'));
     if ($delta === 0) {
-      $reason = 'verification';
       $msg = $this->t('Inventory verified. No changes needed.');
     }
+    elseif ($reason === CountReasons::RESTOCK_UNLOGGED) {
+      $msg = $this->t("Inventory updated: +@delta recorded as a restock that wasn't logged.", ['@delta' => $delta]);
+    }
+    elseif ($reason === CountReasons::COUNT_FOUND) {
+      $msg = $this->t('Inventory updated: +@delta recorded as a count correction (found).', ['@delta' => $delta]);
+    }
     else {
-      $reason = $delta < 0 ? 'lossage' : 'other';
       $msg = $this->t('Inventory updated. Adjustment: @delta.', ['@delta' => $delta > 0 ? '+' . $delta : $delta]);
     }
 
@@ -292,13 +342,6 @@ class InventoryCountForm extends FormBase {
     }
 
     $form_state->setRedirect('entity.node.canonical', ['node' => $node->id()]);
-  }
-
-  /**
-   * AJAX callback for the correction guidance container.
-   */
-  public function ajaxRefreshCorrections(array &$form, FormStateInterface $form_state): array {
-    return $form['correction_guidance'];
   }
 
 }

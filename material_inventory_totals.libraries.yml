@@ -1,0 +1,7 @@
+inventory_count:
+  version: VERSION
+  js:
+    js/inventory-count.js: {}
+  dependencies:
+    - core/drupal
+    - core/once

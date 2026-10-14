@@ -4,6 +4,7 @@ namespace Drupal\material_inventory_totals\Controller;
 
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\material_inventory_totals\CountReasons;
 use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -97,6 +98,9 @@ class InventoryApiController extends ControllerBase {
       'image_url'         => $image_url,
       'drupal_url'        => $drupal_url,
       'source_url'        => $source_url,
+      // Choices a client must offer when the count comes in above
+      // current_count; send the chosen value back as positive_reason.
+      'positive_reasons'  => self::positiveReasonsPayload(),
     ]);
   }
 
@@ -106,7 +110,12 @@ class InventoryApiController extends ControllerBase {
    * Accepts a physical count total, records the delta as an inventory
    * adjustment, and stamps the last-inventoried date on the material.
    *
-   * Request body (JSON): { nid, total_count, memo? }
+   * Request body (JSON): { nid, total_count, memo?, positive_reason? }
+   *
+   * positive_reason is one of the values listed in the item's
+   * positive_reasons and says why a count came in above the system count:
+   * a restock nobody logged, or stock that was already here. Clients that
+   * omit it on a positive count get the legacy unclassified reason.
    * Response (JSON):     { success, new_count, delta, message }
    */
   public function submitCount(Request $request): JsonResponse {
@@ -115,6 +124,7 @@ class InventoryApiController extends ControllerBase {
     $nid = isset($data['nid']) ? (int) $data['nid'] : NULL;
     $total_count = isset($data['total_count']) ? (int) $data['total_count'] : NULL;
     $memo = $data['memo'] ?? '';
+    $positive_reason = isset($data['positive_reason']) && $data['positive_reason'] !== '' ? (string) $data['positive_reason'] : NULL;
 
     if (!$nid || $total_count === NULL) {
       return new JsonResponse(['error' => 'Missing required fields: nid and total_count.'], 400);
@@ -122,6 +132,13 @@ class InventoryApiController extends ControllerBase {
 
     if ($total_count < 0) {
       return new JsonResponse(['error' => 'total_count cannot be negative.'], 400);
+    }
+
+    if ($positive_reason !== NULL && !isset(CountReasons::positiveChoices()[$positive_reason])) {
+      return new JsonResponse([
+        'error' => 'Unknown positive_reason.',
+        'allowed' => array_keys(CountReasons::positiveChoices()),
+      ], 400);
     }
 
     $node = $this->entityTypeManager->getStorage('node')->load($nid);
@@ -138,12 +155,7 @@ class InventoryApiController extends ControllerBase {
     $current_count = $summary['calculated_count'] ?? (int) $node->get('field_material_inventory_count')->value;
     $delta = $total_count - $current_count;
 
-    if ($delta === 0) {
-      $reason = 'other';
-    }
-    else {
-      $reason = $delta < 0 ? 'lossage' : 'other';
-    }
+    $reason = CountReasons::forDelta($delta, $positive_reason);
 
     try {
       $adjustment = $this->entityTypeManager->getStorage('material_inventory')->create([
@@ -165,6 +177,12 @@ class InventoryApiController extends ControllerBase {
     if ($delta === 0) {
       $message = 'Count verified — no change.';
     }
+    elseif ($reason === CountReasons::RESTOCK_UNLOGGED) {
+      $message = sprintf('Count updated: +%d recorded as a restock that wasn\'t logged.', $delta);
+    }
+    elseif ($reason === CountReasons::COUNT_FOUND) {
+      $message = sprintf('Count updated: +%d recorded as a count correction (found).', $delta);
+    }
     elseif ($delta > 0) {
       $message = sprintf('Count updated. Positive correction: +%d.', $delta);
     }
@@ -176,8 +194,24 @@ class InventoryApiController extends ControllerBase {
       'success'   => TRUE,
       'new_count' => $total_count,
       'delta'     => $delta,
+      'reason'    => $reason,
       'message'   => $message,
     ]);
+  }
+
+  /**
+   * Lists the positive-count reasons for API clients.
+   */
+  protected static function positiveReasonsPayload(): array {
+    $out = [];
+    foreach (CountReasons::positiveChoices() as $value => $choice) {
+      $out[] = [
+        'value' => $value,
+        'label' => (string) $choice['label'],
+        'help' => (string) $choice['help'],
+      ];
+    }
+    return $out;
   }
 
 }
