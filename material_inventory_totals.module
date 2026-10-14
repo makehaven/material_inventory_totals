@@ -235,6 +235,10 @@ function material_inventory_totals_form_material_inventory_inventory_adjustment_
     return;
   }
 
+  // Store tab lines are written by the store, never by hand. The value has a
+  // label so existing lines read properly, but it is not a manual choice.
+  unset($form['field_inventory_change_reason']['widget']['#options']['unpaid_tab']);
+
   $material_id = material_inventory_totals_extract_material_id($form_object->getEntity())
     ?? (int) \Drupal::request()->query->get('material');
   $material = $material_id ? \Drupal::entityTypeManager()->getStorage('node')->load($material_id) : NULL;
