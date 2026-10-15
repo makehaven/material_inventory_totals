@@ -104,7 +104,7 @@ class InventoryCountForm extends FormBase {
           'class' => ['alert', 'alert-light', 'border', 'py-2', 'mb-3', 'material-inventory-restock-link'],
         ],
         'text' => [
-          '#markup' => $this->t('Putting out a delivery or backstock? <a href=":url" class="btn btn-sm btn-outline-primary ms-1">Log a restock</a> first, then count.', [
+          '#markup' => $this->t('Putting away a delivery? <a href=":url" class="btn btn-sm btn-outline-primary ms-1">Log a restock</a> first, then count. Backstock is already counted: moving it to the shelf is not a restock.', [
             ':url' => $restock_url->toString(),
           ]),
         ],

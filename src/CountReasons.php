@@ -40,6 +40,11 @@ final class CountReasons {
   public const COUNT_FOUND = 'count_found';
 
   /**
+   * A delivery logged when it arrived. Not a count: it adds what was received.
+   */
+  public const RESTOCK = 'restock';
+
+  /**
    * Legacy code for a positive count whose cause was not given.
    *
    * Still written by API clients that do not send positive_reason yet.

@@ -16,6 +16,11 @@ use Symfony\Component\HttpFoundation\Request;
 class InventoryApiController extends ControllerBase {
 
   /**
+   * Largest single delivery the API accepts; guards against a mistyped total.
+   */
+  public const MAX_RESTOCK = 100000;
+
+  /**
    * The inventory totals calculator.
    *
    * @var \Drupal\material_inventory_totals\Service\InventoryTotalsCalculator
@@ -101,6 +106,10 @@ class InventoryApiController extends ControllerBase {
       // Choices a client must offer when the count comes in above
       // current_count; send the chosen value back as positive_reason.
       'positive_reasons'  => self::positiveReasonsPayload(),
+      // Endpoints beyond the original count API. The app shows its "Log a
+      // delivery" button only when 'restock' is listed, so the app and the
+      // site can be deployed in either order.
+      'features'          => ['restock', 'search'],
     ]);
   }
 
@@ -197,6 +206,130 @@ class InventoryApiController extends ControllerBase {
       'reason'    => $reason,
       'message'   => $message,
     ]);
+  }
+
+  /**
+   * POST /api/v1/inventory/restock
+   *
+   * Logs a delivery: adds the quantity received to the material as a Restock
+   * adjustment. Unlike a count, the client sends what arrived, not a total,
+   * and the last-counted date is left alone.
+   *
+   * Request body (JSON): { nid, quantity, memo? }
+   * Response (JSON):     { success, new_count, added, message }
+   */
+  public function submitRestock(Request $request): JsonResponse {
+    $parsed = self::parseRestock((array) json_decode($request->getContent(), TRUE));
+    if (is_string($parsed)) {
+      return new JsonResponse(['error' => $parsed], 400);
+    }
+    [$nid, $quantity, $memo] = $parsed;
+
+    $node = $this->entityTypeManager->getStorage('node')->load($nid);
+    if (!$node || $node->bundle() !== 'material') {
+      return new JsonResponse(['error' => 'Material not found.'], 404);
+    }
+    if (!$node->access('view', $this->currentUser())) {
+      return new JsonResponse(['error' => 'Access denied.'], 403);
+    }
+
+    try {
+      $this->entityTypeManager->getStorage('material_inventory')->create([
+        'type'                            => 'inventory_adjustment',
+        'field_inventory_ref_material'    => $nid,
+        'field_inventory_quantity_change' => $quantity,
+        'field_inventory_change_reason'   => CountReasons::RESTOCK,
+        'field_inventory_change_memo'     => $memo,
+      ])->save();
+    }
+    catch (\Exception $e) {
+      return new JsonResponse(['error' => 'Failed to save: ' . $e->getMessage()], 500);
+    }
+
+    $summary = $this->calculator->recalculate($nid, FALSE);
+    $new_count = (int) ($summary['calculated_count'] ?? $node->get('field_material_inventory_count')->value);
+
+    return new JsonResponse([
+      'success'   => TRUE,
+      'new_count' => $new_count,
+      'added'     => $quantity,
+      'message'   => sprintf('Delivery logged: +%d. Stock is now %d.', $quantity, $new_count),
+    ]);
+  }
+
+  /**
+   * GET /api/v1/inventory/search?q=plywood
+   *
+   * Finds materials by name for the app's search box: every word typed must
+   * appear in the title, published materials first, at most 20.
+   *
+   * Response (JSON): { results: [{ nid, title, unit, current_count, image_url }] }
+   */
+  public function search(Request $request): JsonResponse {
+    $words = self::searchWords((string) $request->query->get('q', ''));
+    if ($words === []) {
+      return new JsonResponse(['results' => []]);
+    }
+    $query = $this->entityTypeManager->getStorage('node')->getQuery()
+      ->accessCheck(TRUE)
+      ->condition('type', 'material')
+      ->sort('status', 'DESC')
+      ->sort('title')
+      ->range(0, 20);
+    foreach ($words as $word) {
+      $query->condition('title', $word, 'CONTAINS');
+    }
+    $results = [];
+    $generator = \Drupal::service('file_url_generator');
+    foreach ($this->entityTypeManager->getStorage('node')->loadMultiple($query->execute()) as $node) {
+      $image_url = NULL;
+      if ($node->hasField('field_material_image') && ($file = $node->get('field_material_image')->entity)) {
+        $image_url = $generator->generateAbsoluteString($file->getFileUri());
+      }
+      $results[] = [
+        'nid' => (int) $node->id(),
+        'title' => $node->label(),
+        'unit' => $node->get('field_material_unit')->value ?? '',
+        'current_count' => (int) $node->get('field_material_inventory_count')->value,
+        'image_url' => $image_url,
+        'published' => $node->isPublished(),
+      ];
+    }
+    return new JsonResponse(['results' => $results]);
+  }
+
+  /**
+   * Splits a search into words of 2+ characters, at most five.
+   *
+   * @return string[]
+   *   Lower-cased words.
+   */
+  public static function searchWords(string $q): array {
+    $words = preg_split('/\s+/u', mb_strtolower(trim($q)), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $words = array_values(array_filter($words, static fn(string $w): bool => mb_strlen($w) >= 2));
+    return array_slice(array_values(array_unique($words)), 0, 5);
+  }
+
+  /**
+   * Validates a restock request body.
+   *
+   * @return array|string
+   *   [nid, quantity, memo], or an error message for the client.
+   */
+  public static function parseRestock(array $data): array|string {
+    $nid = filter_var($data['nid'] ?? NULL, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if ($nid === FALSE) {
+      return 'Missing or invalid nid.';
+    }
+    $quantity = filter_var($data['quantity'] ?? NULL, FILTER_VALIDATE_INT);
+    if ($quantity === FALSE || $quantity < 1) {
+      return 'Enter the quantity received: a whole number of 1 or more.';
+    }
+    if ($quantity > self::MAX_RESTOCK) {
+      return sprintf('That is more than %d at once. Check the number, or log it in parts.', self::MAX_RESTOCK);
+    }
+    $memo = trim((string) ($data['memo'] ?? ''));
+    return [(int) $nid, (int) $quantity, mb_substr($memo, 0, 255)];
   }
 
   /**

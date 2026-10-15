@@ -39,3 +39,17 @@ deliveries get logged before counting.
 The restock form shows the material's backstock location
 (`field_material_backstock`). People who can edit that field can change it there;
 others see it read-only, as on the count form.
+
+## App endpoints
+
+All under OAuth2, permission `update material inventory counts`.
+
+| Endpoint | Does |
+|---|---|
+| `GET /api/v1/inventory/item/{nid}` | Item details; `features` lists the endpoints below so the app can hide what an older site lacks |
+| `POST /api/v1/inventory/count` | `{nid, total_count, memo?, positive_reason?}`: a physical count |
+| `POST /api/v1/inventory/restock` | `{nid, quantity, memo?}`: a delivery received; adds `quantity` as a Restock and leaves the last-counted date alone |
+| `GET /api/v1/inventory/search?q=` | Materials whose title contains every word typed (2+ letters), published first, 20 max |
+
+Backstock is part of a count, so moving backstock to the shelf is not a
+restock. Log a restock when a delivery arrives, wherever it is put.

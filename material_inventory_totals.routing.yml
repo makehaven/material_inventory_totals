@@ -23,6 +23,30 @@ material_inventory_totals.api_submit_count:
     _auth:
       - oauth2
 
+material_inventory_totals.api_restock:
+  path: '/api/v1/inventory/restock'
+  defaults:
+    _controller: '\Drupal\material_inventory_totals\Controller\InventoryApiController::submitRestock'
+    _format: json
+  requirements:
+    _permission: 'update material inventory counts'
+  methods: [POST]
+  options:
+    _auth:
+      - oauth2
+
+material_inventory_totals.api_search:
+  path: '/api/v1/inventory/search'
+  defaults:
+    _controller: '\Drupal\material_inventory_totals\Controller\InventoryApiController::search'
+    _format: json
+  requirements:
+    _permission: 'update material inventory counts'
+  methods: [GET]
+  options:
+    _auth:
+      - oauth2
+
 material_inventory_totals.inventory_count:
   path: '/admin/material/{node}/inventory-count'
   defaults:
