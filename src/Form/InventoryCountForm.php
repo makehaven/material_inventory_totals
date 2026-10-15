@@ -8,6 +8,7 @@ use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Url;
+use Drupal\material_inventory_totals\Controller\InventoryApiController;
 use Drupal\material_inventory_totals\CountReasons;
 use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
 use Drupal\node\NodeInterface;
@@ -260,7 +261,9 @@ class InventoryCountForm extends FormBase {
    * Route access callback.
    */
   public static function access(NodeInterface $node, AccountInterface $account): AccessResult {
-    return AccessResult::allowedIf($node->bundle() === 'material')
+    // Meters and credits (Inventory method: Untracked) have nothing to count,
+    // so they get no Inventory Count tab.
+    return AccessResult::allowedIf($node->bundle() === 'material' && !InventoryApiController::isUntracked($node))
       ->addCacheableDependency($node)
       ->cachePerPermissions();
   }

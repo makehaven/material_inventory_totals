@@ -6,6 +6,7 @@ use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\material_inventory_totals\CountReasons;
 use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
+use Drupal\node\NodeInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -19,6 +20,28 @@ class InventoryApiController extends ControllerBase {
    * Largest single delivery the API accepts; guards against a mistyped total.
    */
   public const MAX_RESTOCK = 100000;
+
+  /**
+   * Inventory method of meters and credits: printer pages, machine time.
+   */
+  public const UNTRACKED = 'untracked';
+
+  /**
+   * Whether a material is a meter or credit rather than stock on a shelf.
+   */
+  public static function isUntracked(NodeInterface $node): bool {
+    return $node->hasField('field_material_inventory_method')
+      && $node->get('field_material_inventory_method')->value === self::UNTRACKED;
+  }
+
+  /**
+   * Refusal for counts and deliveries of an untracked material.
+   */
+  protected static function untrackedResponse(NodeInterface $node): JsonResponse {
+    return new JsonResponse([
+      'error' => sprintf('%s is not counted: it is a meter or credit (Inventory method: Untracked).', $node->label()),
+    ], 409);
+  }
 
   /**
    * The inventory totals calculator.
@@ -103,6 +126,11 @@ class InventoryApiController extends ControllerBase {
       'image_url'         => $image_url,
       'drupal_url'        => $drupal_url,
       'source_url'        => $source_url,
+      // 'untracked' = a meter or credit: the app offers no count or delivery.
+      'inventory_method'  => $node->hasField('field_material_inventory_method') ? $node->get('field_material_inventory_method')->value : NULL,
+      // How it is bought, e.g. "50# box (10 bags)", so a delivery is entered
+      // in the units it is sold in.
+      'purchase_unit'     => $node->hasField('field_material_purchase_unit') ? ($node->get('field_material_purchase_unit')->value ?: NULL) : NULL,
       // Choices a client must offer when the count comes in above
       // current_count; send the chosen value back as positive_reason.
       'positive_reasons'  => self::positiveReasonsPayload(),
@@ -158,6 +186,9 @@ class InventoryApiController extends ControllerBase {
 
     if (!$node->access('view', $this->currentUser())) {
       return new JsonResponse(['error' => 'Access denied.'], 403);
+    }
+    if (self::isUntracked($node)) {
+      return self::untrackedResponse($node);
     }
 
     $summary = $this->calculator->recalculate($nid, FALSE);
@@ -231,6 +262,9 @@ class InventoryApiController extends ControllerBase {
     }
     if (!$node->access('view', $this->currentUser())) {
       return new JsonResponse(['error' => 'Access denied.'], 403);
+    }
+    if (self::isUntracked($node)) {
+      return self::untrackedResponse($node);
     }
 
     try {
