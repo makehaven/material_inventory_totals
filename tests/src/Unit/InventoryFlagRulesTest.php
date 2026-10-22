@@ -1,0 +1,49 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Drupal\Tests\material_inventory_totals\Unit;
+
+use Drupal\material_inventory_totals\InventoryFlagRules as R;
+use Drupal\Tests\UnitTestCase;
+
+/**
+ * @coversDefaultClass \Drupal\material_inventory_totals\InventoryFlagRules
+ * @group material_inventory_totals
+ */
+class InventoryFlagRulesTest extends UnitTestCase {
+
+  /**
+   * Builds a count with sensible defaults.
+   */
+  protected function sample(array $values): array {
+    return $values + [
+      'delta' => 0,
+      'system_before' => 20,
+      'previous_delta' => NULL,
+      'restock_since_previous' => FALSE,
+      'unit_cost' => 1.0,
+      'has_backstock' => FALSE,
+    ];
+  }
+
+  /**
+   * Each rule fires on its own case and not on its near miss.
+   */
+  public function testRules(): void {
+    $this->assertSame([], R::evaluate($this->sample(['delta' => 0, 'previous_delta' => -5])));
+    // Short last time, over now: a swing, and nothing was delivered.
+    $this->assertSame([R::SWING, R::ROSE_UNLOGGED], R::evaluate($this->sample(['delta' => 2, 'previous_delta' => -2])));
+    // Up with a delivery logged and no swing: fine.
+    $this->assertSame([], R::evaluate($this->sample(['delta' => 2, 'restock_since_previous' => TRUE])));
+    // Jump must beat both 3 units and 25% of the system count.
+    $this->assertSame([R::BIG_JUMP], R::evaluate($this->sample(['delta' => -6, 'system_before' => 20])));
+    $this->assertSame([], R::evaluate($this->sample(['delta' => -5, 'system_before' => 20])));
+    $this->assertSame([], R::evaluate($this->sample(['delta' => -3, 'system_before' => 4])));
+    // Losses: $50 or more, or any loss on an item with backstock.
+    $this->assertSame([R::LOSS], R::evaluate($this->sample(['delta' => -2, 'unit_cost' => 25.0])));
+    $this->assertSame([], R::evaluate($this->sample(['delta' => -2, 'unit_cost' => 24.0])));
+    $this->assertSame([R::LOSS], R::evaluate($this->sample(['delta' => -1, 'has_backstock' => TRUE])));
+  }
+
+}

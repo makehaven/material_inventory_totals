@@ -1,0 +1,73 @@
+<?php
+
+/**
+ * @file
+ * Install, update and schema hooks for Material Inventory Totals.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function material_inventory_totals_schema(): array {
+  return material_inventory_totals_session_schema();
+}
+
+/**
+ * Tables for inventory sessions and the counts they flag.
+ *
+ * A session runs from "Start inventory" to "Finalize". Counts saved while it
+ * is open are checked when someone clicks "Inventory complete"; each count
+ * that needs a second look gets a flag row until someone resolves it.
+ */
+function material_inventory_totals_session_schema(): array {
+  return [
+    'material_inventory_session' => [
+      'description' => 'A store inventory: start, complete, finalize.',
+      'fields' => [
+        'id' => ['type' => 'serial', 'unsigned' => TRUE, 'not null' => TRUE],
+        'started' => ['type' => 'int', 'not null' => TRUE, 'default' => 0],
+        'started_by' => ['type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0],
+        'completed' => ['type' => 'int', 'not null' => FALSE],
+        'completed_by' => ['type' => 'int', 'unsigned' => TRUE, 'not null' => FALSE],
+        'finalized' => ['type' => 'int', 'not null' => FALSE],
+        'finalized_by' => ['type' => 'int', 'unsigned' => TRUE, 'not null' => FALSE],
+        'summary' => ['type' => 'text', 'size' => 'medium', 'not null' => FALSE, 'description' => 'JSON summary written at finalize.'],
+      ],
+      'primary key' => ['id'],
+      'indexes' => ['started' => ['started']],
+    ],
+    'material_inventory_session_flag' => [
+      'description' => 'A count in an inventory that needs a second look.',
+      'fields' => [
+        'id' => ['type' => 'serial', 'unsigned' => TRUE, 'not null' => TRUE],
+        'session_id' => ['type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE],
+        'adjustment_id' => ['type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE],
+        'material_id' => ['type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE],
+        'flags' => ['type' => 'varchar', 'length' => 255, 'not null' => TRUE, 'default' => ''],
+        'delta' => ['type' => 'int', 'not null' => TRUE, 'default' => 0, 'description' => 'The count difference when flagged.'],
+        'value' => ['type' => 'numeric', 'precision' => 12, 'scale' => 2, 'not null' => TRUE, 'default' => 0, 'description' => 'abs(delta) at store price, for sorting.'],
+        'status' => ['type' => 'varchar', 'length' => 32, 'not null' => TRUE, 'default' => 'open', 'description' => 'open, confirmed, recounted, not_sure.'],
+        'resolved' => ['type' => 'int', 'not null' => FALSE],
+        'resolved_by' => ['type' => 'int', 'unsigned' => TRUE, 'not null' => FALSE],
+        'note' => ['type' => 'varchar', 'length' => 255, 'not null' => FALSE],
+      ],
+      'primary key' => ['id'],
+      'indexes' => [
+        'session_status' => ['session_id', 'status'],
+        'adjustment' => ['adjustment_id'],
+      ],
+    ],
+  ];
+}
+
+/**
+ * Creates the inventory session tables.
+ */
+function material_inventory_totals_update_9002(): void {
+  $schema = \Drupal::database()->schema();
+  foreach (material_inventory_totals_session_schema() as $table => $spec) {
+    if (!$schema->tableExists($table)) {
+      $schema->createTable($table, $spec);
+    }
+  }
+}

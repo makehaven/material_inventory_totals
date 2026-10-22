@@ -49,6 +49,30 @@ The restock form shows the material's backstock location
 (`field_material_backstock`). People who can edit that field can change it there;
 others see it read-only, as on the count form.
 
+## Store inventory (start, complete, recheck, finalize)
+
+`/admin/material/inventory` runs a monthly inventory:
+
+1. Staff ("edit any material_inventory entities") click **Start inventory**.
+2. People count as usual, on the website or in the app. Counts change stock
+   straight away; the count form shows "Inventory in progress".
+3. Anyone with "update material inventory counts" clicks **Inventory complete**.
+   Each item's latest count since the start is checked by
+   `InventoryFlagRules`: went the other way from the last count, went up with
+   no delivery logged, more than 25% and more than 3 off, or a loss of $50+
+   (any loss on an item with backstock). Flagged items are listed by value.
+4. Anyone rechecks each flag: **recount** (corrects the original count in
+   place, so stock equals what is there now), **confirm** (a high count needs
+   its reason), or **Not sure** (reason `count_review`, goes to the count
+   review page; low counts can be "Not sure" too).
+5. Staff click **Finalize** once no flag is open. The summary is saved and
+   emailed to `staff@makehaven.org` (override with
+   `$settings['material_inventory_summary_email']`).
+
+Counts outside an inventory work as before. Sessions and flags live in the
+`material_inventory_session` and `material_inventory_session_flag` tables
+(`material_inventory_totals_update_9002`).
+
 ## App endpoints
 
 All under OAuth2, permission `update material inventory counts`.

@@ -69,3 +69,20 @@ material_inventory_totals.count_review:
     _title: 'Inventory counts to review'
   requirements:
     _permission: 'edit any material_inventory entities'
+
+material_inventory_totals.inventory:
+  path: '/admin/material/inventory'
+  defaults:
+    _form: '\Drupal\material_inventory_totals\Form\InventorySessionForm'
+    _title: 'Store inventory'
+  requirements:
+    _permission: 'update material inventory counts'
+
+material_inventory_totals.inventory_flag:
+  path: '/admin/material/inventory/flag/{flag}'
+  defaults:
+    _form: '\Drupal\material_inventory_totals\Form\InventoryFlagForm'
+    _title: 'Recheck a count'
+  requirements:
+    _permission: 'update material inventory counts'
+    flag: \d+

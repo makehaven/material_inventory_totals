@@ -42,6 +42,44 @@ function material_inventory_totals_cron(): void {
 }
 
 /**
+ * Implements hook_mail().
+ */
+function material_inventory_totals_mail(string $key, array &$message, array $params): void {
+  if ($key !== 'inventory_summary') {
+    return;
+  }
+  $s = $params['summary'];
+  $date = \Drupal::service('date.formatter')->format($s['finalized'] ?: \Drupal::time()->getRequestTime(), 'custom', 'F j, Y');
+  $message['subject'] = t('Store inventory finalized: @date', ['@date' => $date]);
+  $lines = [
+    t('The store inventory started @start was finalized on @date.', [
+      '@start' => \Drupal::service('date.formatter')->format($s['started'], 'custom', 'F j'),
+      '@date' => $date,
+    ]),
+    '',
+    t('Items counted: @n (@m matched the system)', ['@n' => $s['items_counted'], '@m' => $s['matched']]),
+    t('Lower than expected (loss): @n, $@v', ['@n' => $s['short']['n'], '@v' => number_format($s['short']['value'], 2)]),
+    t('Higher than expected: @n, $@v', ['@n' => $s['over']['n'], '@v' => number_format($s['over']['value'], 2)]),
+  ];
+  foreach ($s['over']['by_reason'] as $reason => $n) {
+    $lines[] = '  - ' . $reason . ': ' . $n;
+  }
+  $lines[] = t('Flagged for recheck: @n (@c confirmed, @r recounted, @u not sure)', [
+    '@n' => $s['flags']['total'],
+    '@c' => $s['flags']['confirmed'],
+    '@r' => $s['flags']['recounted'],
+    '@u' => $s['flags']['not_sure'],
+  ]);
+  if ($s['not_sure_items']) {
+    $lines[] = '';
+    $lines[] = t('Still to be checked by staff: @items', ['@items' => implode(', ', $s['not_sure_items'])]);
+  }
+  $lines[] = '';
+  $lines[] = t('Details: @url', ['@url' => $params['url']]);
+  $message['body'][] = implode("\n", array_map('strval', $lines));
+}
+
+/**
  * Implements hook_entity_insert().
  */
 function material_inventory_totals_entity_insert(EntityInterface $entity): void {

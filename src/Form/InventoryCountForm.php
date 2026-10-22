@@ -175,6 +175,19 @@ class InventoryCountForm extends FormBase {
        ];
     }
 
+    // Counters should know their count is part of an inventory.
+    $session = \Drupal::service('material_inventory_totals.sessions')->current();
+    if ($session && !$session->completed) {
+      $form['inventory_notice'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'div',
+        '#value' => $this->t('Inventory in progress. Count shelf and backstock together. <a href=":url">Inventory page</a>', [
+          ':url' => Url::fromRoute('material_inventory_totals.inventory')->toString(),
+        ]),
+        '#attributes' => ['class' => ['alert', 'alert-info', 'py-2', 'mb-3']],
+      ];
+    }
+
     // Staff who sort out "not sure" counts see this item's open ones here.
     $review_url = Url::fromRoute('material_inventory_totals.count_review', [], ['query' => ['material' => $node->id()]]);
     if ($review_url->access()) {

@@ -68,7 +68,7 @@ class CountReviewForm extends FormBase {
 
     $choices = CountReasons::positiveChoices();
     $form['intro'] = [
-      '#markup' => '<p>' . $this->t('Counts that came in higher than the system count, where the counter was not sure why. The counted number is already in the system; only the reason is open. Check deliveries, receipts and backstock, then pick what it was.') . '</p>'
+      '#markup' => '<p>' . $this->t('Counts nobody could explain: higher or lower than the system count, marked "Not sure" by the counter or on an inventory recheck. The counted number is already in the system; only the reason is open. Check deliveries, receipts and backstock, then pick what it was.') . '</p>'
       . '<ul><li><strong>' . $choices[CountReasons::RESTOCK_UNLOGGED]['label'] . '</strong>: ' . $choices[CountReasons::RESTOCK_UNLOGGED]['help'] . '</li>'
       . '<li><strong>' . $choices[CountReasons::COUNT_FOUND]['label'] . '</strong>: ' . $choices[CountReasons::COUNT_FOUND]['help'] . '</li></ul>',
     ];
@@ -99,14 +99,17 @@ class CountReviewForm extends FormBase {
       $row['material'] = $material
         ? ['#type' => 'link', '#title' => $material->label(), '#url' => $material->toUrl()]
         : ['#markup' => $this->t('(deleted item)')];
-      $row['quantity'] = ['#markup' => '+' . (int) $adjustment->get('field_inventory_quantity_change')->value];
+      $quantity = (int) $adjustment->get('field_inventory_quantity_change')->value;
+      $row['quantity'] = ['#markup' => sprintf('%+d', $quantity)];
       $row['owner'] = ['#markup' => $owner ? $owner->getDisplayName() : ''];
       $row['memo'] = ['#plain_text' => (string) $adjustment->get('field_inventory_change_memo')->value];
       $row['actions'] = ['#type' => 'container'];
-      foreach ([CountReasons::RESTOCK_UNLOGGED, CountReasons::COUNT_FOUND] as $code) {
+      // A low count can only be a loss; a high one is a delivery or a find.
+      $codes = $quantity < 0 ? [CountReasons::LOSS] : [CountReasons::RESTOCK_UNLOGGED, CountReasons::COUNT_FOUND];
+      foreach ($codes as $code) {
         $row['actions'][$code] = [
           '#type' => 'submit',
-          '#value' => $choices[$code]['label'],
+          '#value' => self::resolveLabels()[$code],
           '#name' => 'resolve_' . $id . '_' . $code,
           '#adjustment_id' => $id,
           '#resolve_reason' => $code,
@@ -126,7 +129,7 @@ class CountReviewForm extends FormBase {
     $trigger = $form_state->getTriggeringElement();
     $id = $trigger['#adjustment_id'] ?? NULL;
     $reason = $trigger['#resolve_reason'] ?? NULL;
-    if (!$id || !in_array($reason, [CountReasons::RESTOCK_UNLOGGED, CountReasons::COUNT_FOUND], TRUE)) {
+    if (!$id || !isset(self::resolveLabels()[$reason])) {
       return;
     }
 
@@ -147,8 +150,20 @@ class CountReviewForm extends FormBase {
     $material = $adjustment->get('field_inventory_ref_material')->entity;
     $this->messenger()->addStatus($this->t('@item: recorded as "@reason".', [
       '@item' => $material ? $material->label() : $this->t('Item'),
-      '@reason' => CountReasons::positiveChoices()[$reason]['label'],
+      '@reason' => self::resolveLabels()[$reason],
     ]));
+  }
+
+  /**
+   * What staff can decide a "not sure" count was.
+   */
+  protected static function resolveLabels(): array {
+    $choices = CountReasons::positiveChoices();
+    return [
+      CountReasons::RESTOCK_UNLOGGED => (string) $choices[CountReasons::RESTOCK_UNLOGGED]['label'],
+      CountReasons::COUNT_FOUND => (string) $choices[CountReasons::COUNT_FOUND]['label'],
+      CountReasons::LOSS => (string) t('Loss confirmed'),
+    ];
   }
 
 }

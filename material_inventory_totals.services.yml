@@ -11,3 +11,13 @@ services:
       - '@state'
       - '@lock'
       - '@logger.channel.material_inventory_totals'
+
+  material_inventory_totals.sessions:
+    class: Drupal\material_inventory_totals\Service\InventorySessionManager
+    arguments:
+      - '@database'
+      - '@entity_type.manager'
+      - '@entity_field.manager'
+      - '@datetime.time'
+      - '@plugin.manager.mail'
+      - '@language_manager'
