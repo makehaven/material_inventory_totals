@@ -3,3 +3,7 @@ update material inventory counts:
   title: 'Update material inventory counts'
   description: 'Allow users to update the total count for material inventory items.'
   restrict access: true
+
+finalize store inventory:
+  title: 'Finalize store inventory'
+  description: 'Close an inventory once every flagged count is handled; emails the summary to staff.'

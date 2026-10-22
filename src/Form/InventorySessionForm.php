@@ -17,9 +17,9 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 class InventorySessionForm extends FormBase {
 
   /**
-   * Permission that may start and finalize an inventory.
+   * Permission that may finalize an inventory (managers).
    */
-  public const STAFF_PERMISSION = 'edit any material_inventory entities';
+  public const FINALIZE_PERMISSION = 'finalize store inventory';
 
   /**
    * Constructs the form.
@@ -53,7 +53,7 @@ class InventorySessionForm extends FormBase {
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
     $form['#cache']['max-age'] = 0;
-    $is_staff = $this->currentUser()->hasPermission(self::STAFF_PERMISSION);
+    $can_finalize = $this->currentUser()->hasPermission(self::FINALIZE_PERMISSION);
     $requested = (int) $this->getRequest()->query->get('session');
     $session = $requested ? $this->sessions->load($requested) : $this->sessions->current();
     $form_state->set('session_id', $session->id ?? NULL);
@@ -71,19 +71,14 @@ class InventorySessionForm extends FormBase {
 
     if (!$session) {
       $form['intro'] = [
-        '#markup' => '<p>' . $this->t('No inventory is open. Start one before counting; every count saved after that, on the website or in the app, is checked when you click "Inventory complete". Counts at other times work as usual.') . '</p>',
+        '#markup' => '<p>' . $this->t('No inventory is open. Start one before counting; every count saved after that, on the website or in the app, is checked when you click "Inventory complete". Counts at other times work as usual. Weighed or estimated items (glazes, roll paper) are counted but not checked.') . '</p>',
       ];
-      if ($is_staff) {
-        $form['start'] = [
-          '#type' => 'submit',
-          '#value' => $this->t('Start inventory'),
-          '#name' => 'start',
-          '#button_type' => 'primary',
-        ];
-      }
-      else {
-        $form['start_note'] = ['#markup' => '<p>' . $this->t('Staff start an inventory.') . '</p>'];
-      }
+      $form['start'] = [
+        '#type' => 'submit',
+        '#value' => $this->t('Start inventory'),
+        '#name' => 'start',
+        '#button_type' => 'primary',
+      ];
       $form['history'] = $this->historyBuild();
       return $form;
     }
@@ -118,7 +113,12 @@ class InventorySessionForm extends FormBase {
     ];
     $form['flags'] = $this->flagsTable($session, TRUE);
 
-    if ($is_staff) {
+    if (!$can_finalize) {
+      $form['finalize_note'] = [
+        '#markup' => '<p class="description">' . $this->t('When every item is handled, a manager finalizes the inventory.') . '</p>',
+      ];
+    }
+    else {
       $form['finalize'] = [
         '#type' => 'submit',
         '#value' => $this->t('Finalize inventory'),
@@ -141,11 +141,11 @@ class InventorySessionForm extends FormBase {
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $action = $form_state->getTriggeringElement()['#name'] ?? '';
     $uid = (int) $this->currentUser()->id();
-    $is_staff = $this->currentUser()->hasPermission(self::STAFF_PERMISSION);
+    $can_finalize = $this->currentUser()->hasPermission(self::FINALIZE_PERMISSION);
     $session = $form_state->get('session_id') ? $this->sessions->load((int) $form_state->get('session_id')) : NULL;
 
     try {
-      if ($action === 'start' && $is_staff) {
+      if ($action === 'start') {
         $this->sessions->start($uid);
         $this->messenger()->addStatus($this->t('Inventory started. Count as usual, on the website or in the app.'));
       }
@@ -155,7 +155,7 @@ class InventorySessionForm extends FormBase {
           ? $this->formatPlural($flagged, 'Counting closed. 1 item needs a recheck.', 'Counting closed. @count items need a recheck.')
           : $this->t('Counting closed. Nothing looks wrong.'));
       }
-      elseif ($action === 'finalize' && $session && $is_staff) {
+      elseif ($action === 'finalize' && $session && $can_finalize) {
         $this->sessions->finalize($session, $uid);
         $this->messenger()->addStatus($this->t('Inventory finalized and the summary emailed to staff.'));
         $form_state->setRedirect('material_inventory_totals.inventory', [], ['query' => ['session' => $session->id]]);
@@ -226,6 +226,7 @@ class InventorySessionForm extends FormBase {
     $s = json_decode((string) $session->summary, TRUE) ?: $this->sessions->summarize($session);
     $items = [
       $this->t('Items counted: @n (@m matched the system)', ['@n' => $s['items_counted'], '@m' => $s['matched']]),
+      $this->t('Weighed or estimated items counted: @n (not checked, not in the totals below)', ['@n' => $s['estimated'] ?? 0]),
       $this->t('Higher than expected: @n ($@v)', [
         '@n' => $s['over']['n'],
         '@v' => number_format($s['over']['value'], 2),

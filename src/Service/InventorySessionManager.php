@@ -105,6 +105,11 @@ class InventorySessionManager {
     $now = $this->time->getRequestTime();
     $flagged = 0;
     foreach ($this->latestCounts((int) $session->started, $now) as $adjustment) {
+      // Weighed or estimated items (glazes, roll paper) are often zeroed
+      // out on purpose, so a big swing there is expected.
+      if ($this->isEstimated($adjustment->get('field_inventory_ref_material')->entity)) {
+        continue;
+      }
       $context = $this->countContext($adjustment);
       $flags = InventoryFlagRules::evaluate($context);
       if (!$flags) {
@@ -280,6 +285,7 @@ class InventorySessionManager {
       'finalized' => (int) ($session->finalized ?? 0),
       'items_counted' => count($counts),
       'matched' => 0,
+      'estimated' => 0,
       'over' => ['n' => 0, 'value' => 0.0, 'by_reason' => []],
       'short' => ['n' => 0, 'value' => 0.0],
       'flags' => ['total' => 0, 'confirmed' => 0, 'recounted' => 0, 'not_sure' => 0],
@@ -290,7 +296,11 @@ class InventorySessionManager {
       $delta = (int) $adjustment->get('field_inventory_quantity_change')->value;
       $material = $adjustment->get('field_inventory_ref_material')->entity;
       $value = abs($delta) * $this->unitCost($material);
-      if ($delta === 0) {
+      if ($this->isEstimated($material)) {
+        // Reported on their own: zeroing out is not a loss.
+        $summary['estimated']++;
+      }
+      elseif ($delta === 0) {
         $summary['matched']++;
       }
       elseif ($delta > 0) {
@@ -467,6 +477,15 @@ class InventorySessionManager {
   protected function appendMemo(ContentEntityInterface $adjustment, string $text): void {
     $memo = trim((string) $adjustment->get('field_inventory_change_memo')->value);
     $adjustment->set('field_inventory_change_memo', mb_substr($memo === '' ? $text : $memo . ' | ' . $text, 0, 255));
+  }
+
+  /**
+   * Whether the item's stock is estimated (weighed, measured on a roll).
+   */
+  public function isEstimated($material): bool {
+    return $material instanceof NodeInterface
+      && $material->hasField('field_material_inventory_method')
+      && $material->get('field_material_inventory_method')->value === 'estimated';
   }
 
   /**

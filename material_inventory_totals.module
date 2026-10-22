@@ -58,6 +58,7 @@ function material_inventory_totals_mail(string $key, array &$message, array $par
     ]),
     '',
     t('Items counted: @n (@m matched the system)', ['@n' => $s['items_counted'], '@m' => $s['matched']]),
+    t('Weighed or estimated items counted: @n (not in the totals below)', ['@n' => $s['estimated'] ?? 0]),
     t('Lower than expected (loss): @n, $@v', ['@n' => $s['short']['n'], '@v' => number_format($s['short']['value'], 2)]),
     t('Higher than expected: @n, $@v', ['@n' => $s['over']['n'], '@v' => number_format($s['over']['value'], 2)]),
   ];

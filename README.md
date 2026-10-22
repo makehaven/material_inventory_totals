@@ -53,7 +53,7 @@ others see it read-only, as on the count form.
 
 `/admin/material/inventory` runs a monthly inventory:
 
-1. Staff ("edit any material_inventory entities") click **Start inventory**.
+1. Anyone with "update material inventory counts" clicks **Start inventory**.
 2. People count as usual, on the website or in the app. Counts change stock
    straight away; the count form shows "Inventory in progress".
 3. Anyone with "update material inventory counts" clicks **Inventory complete**.
@@ -65,11 +65,13 @@ others see it read-only, as on the count form.
    place, so stock equals what is there now), **confirm** (a high count needs
    its reason), or **Not sure** (reason `count_review`, goes to the count
    review page; low counts can be "Not sure" too).
-5. Staff click **Finalize** once no flag is open. The summary is saved and
+5. A manager ("finalize store inventory") clicks **Finalize** once no flag is open. The summary is saved and
    emailed to `staff@makehaven.org` (override with
    `$settings['material_inventory_summary_email']`).
 
-Counts outside an inventory work as before. Sessions and flags live in the
+Items with inventory method "Estimated" (glazes, roll paper; often zeroed out
+on purpose) are counted but never flagged, and the summary lists them apart
+from losses and overages. Counts outside an inventory work as before. Sessions and flags live in the
 `material_inventory_session` and `material_inventory_session_flag` tables
 (`material_inventory_totals_update_9002`).
 
