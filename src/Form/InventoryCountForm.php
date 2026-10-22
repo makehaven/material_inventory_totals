@@ -175,6 +175,26 @@ class InventoryCountForm extends FormBase {
        ];
     }
 
+    // Staff who sort out "not sure" counts see this item's open ones here.
+    $review_url = Url::fromRoute('material_inventory_totals.count_review', [], ['query' => ['material' => $node->id()]]);
+    if ($review_url->access()) {
+      $open = $this->entityTypeManager->getStorage('material_inventory')->getQuery()
+        ->condition('type', 'inventory_adjustment')
+        ->condition('field_inventory_ref_material', $node->id())
+        ->condition('field_inventory_change_reason', CountReasons::NEEDS_REVIEW)
+        ->accessCheck(FALSE)
+        ->count()
+        ->execute();
+      if ($open) {
+        $form['review_notice'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'div',
+          '#value' => $this->formatPlural($open, 'An earlier higher count of this item is waiting for staff review. <a href=":url">Review it</a>', '@count earlier higher counts of this item are waiting for staff review. <a href=":url">Review them</a>', [':url' => $review_url->toString()]),
+          '#attributes' => ['class' => ['alert', 'alert-warning', 'py-2', 'mb-3']],
+        ];
+      }
+    }
+
     $form['#attached']['library'][] = 'material_inventory_totals/inventory_count';
     $form['#attributes']['data-system-count'] = $current_count;
 
@@ -290,7 +310,7 @@ class InventoryCountForm extends FormBase {
     $summary = $this->calculator->recalculate((int) $node->id(), FALSE);
     $delta = (int) $new_total - (int) ($summary['calculated_count'] ?? 0);
     if ($delta > 0 && !isset(CountReasons::positiveChoices()[$form_state->getValue('positive_reason')])) {
-      $form_state->setErrorByName('positive_reason', $this->t("You counted @delta more than the system count. Choose whether that is a restock that wasn't logged or a count correction.", ['@delta' => $delta]));
+      $form_state->setErrorByName('positive_reason', $this->t("You counted @delta more than the system count. Choose a reason, or \"Not sure\" if you don't know.", ['@delta' => $delta]));
     }
   }
 
@@ -313,6 +333,9 @@ class InventoryCountForm extends FormBase {
     }
     elseif ($reason === CountReasons::COUNT_FOUND) {
       $msg = $this->t('Inventory updated: +@delta recorded as a count correction (found).', ['@delta' => $delta]);
+    }
+    elseif ($reason === CountReasons::NEEDS_REVIEW) {
+      $msg = $this->t('Inventory updated: +@delta saved. Staff will check where the extra came from.', ['@delta' => $delta]);
     }
     else {
       $msg = $this->t('Inventory updated. Adjustment: @delta.', ['@delta' => $delta > 0 ? '+' . $delta : $delta]);

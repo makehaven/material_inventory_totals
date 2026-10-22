@@ -151,8 +151,8 @@ class InventoryApiController extends ControllerBase {
    *
    * positive_reason is one of the values listed in the item's
    * positive_reasons and says why a count came in above the system count:
-   * a restock nobody logged, or stock that was already here. Clients that
-   * omit it on a positive count get the legacy unclassified reason.
+   * a restock nobody logged, stock that was already here, or "not sure".
+   * A positive count without one goes to staff review, like "not sure".
    * Response (JSON):     { success, new_count, delta, message }
    */
   public function submitCount(Request $request): JsonResponse {
@@ -223,8 +223,8 @@ class InventoryApiController extends ControllerBase {
     elseif ($reason === CountReasons::COUNT_FOUND) {
       $message = sprintf('Count updated: +%d recorded as a count correction (found).', $delta);
     }
-    elseif ($delta > 0) {
-      $message = sprintf('Count updated. Positive correction: +%d.', $delta);
+    elseif ($reason === CountReasons::NEEDS_REVIEW) {
+      $message = sprintf('Count saved: +%d. Staff will check where the extra came from.', $delta);
     }
     else {
       $message = sprintf('Count updated. Shrinkage: %d.', $delta);

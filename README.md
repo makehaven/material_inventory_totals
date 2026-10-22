@@ -27,12 +27,21 @@ total and the system count as an adjustment. The reason codes live in
 | below | `lossage` | Loss / shrinkage |
 | above | `restock_unlogged` | Stock arrived (delivery, backstock) and nobody logged a restock |
 | above | `count_found` | Stock was already here: miscount, or items found |
-| above, no choice given | `other` | Legacy: API clients that do not send `positive_reason` yet |
+| above | `count_review` | Counter is not sure why; saved as counted, staff decide later |
+| above, no choice given | `count_review` | API clients that do not send `positive_reason` |
+| (older rows) | `other` | Legacy: positive counts from before reasons were asked |
 
 A count above the system count must say which of the two it is, otherwise
 unlogged restocks cancel out real shrinkage. API clients read the choices from
 `positive_reasons` on `GET /api/v1/inventory/item/{nid}` and send the chosen
-value back as `positive_reason`. The count form links to the restock entry form
+value back as `positive_reason`.
+
+The person counting often cannot tell a missed delivery from a miscount, so
+"Not sure, staff will check" lets them save and move on. The count is applied
+straight away; only the reason is open. Staff with "edit any
+material_inventory entities" sort these at `/admin/material/count-review`
+(two buttons per row set the reason; stock does not move), and the count form
+shows staff when an item has open ones. The count form links to the restock entry form
 (the `inventory_adjustment` add form prefilled with `reason=restock`) so
 deliveries get logged before counting.
 

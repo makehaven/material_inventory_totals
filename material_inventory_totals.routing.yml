@@ -61,3 +61,11 @@ material_inventory_totals.inventory_count:
     parameters:
       node:
         type: 'entity:node'
+
+material_inventory_totals.count_review:
+  path: '/admin/material/count-review'
+  defaults:
+    _form: '\Drupal\material_inventory_totals\Form\CountReviewForm'
+    _title: 'Inventory counts to review'
+  requirements:
+    _permission: 'edit any material_inventory entities'

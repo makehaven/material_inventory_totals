@@ -40,6 +40,14 @@ final class CountReasons {
   public const COUNT_FOUND = 'count_found';
 
   /**
+   * Count came in above and the counter could not say why.
+   *
+   * The count is saved as-is; staff work out the cause later on the count
+   * review page and change the reason to RESTOCK_UNLOGGED or COUNT_FOUND.
+   */
+  public const NEEDS_REVIEW = 'count_review';
+
+  /**
    * A delivery logged when it arrived. Not a count: it adds what was received.
    */
   public const RESTOCK = 'restock';
@@ -47,7 +55,8 @@ final class CountReasons {
   /**
    * Legacy code for a positive count whose cause was not given.
    *
-   * Still written by API clients that do not send positive_reason yet.
+   * No longer written: a positive count without a reason now goes to
+   * NEEDS_REVIEW. Kept because older adjustments carry it.
    */
   public const UNCLASSIFIED = 'other';
 
@@ -67,6 +76,10 @@ final class CountReasons {
         'label' => new TranslatableMarkup('Count correction (found)'),
         'help' => new TranslatableMarkup('The stock was already here: last count was off, or items turned up somewhere else.'),
       ],
+      self::NEEDS_REVIEW => [
+        'label' => new TranslatableMarkup('Not sure, staff will check'),
+        'help' => new TranslatableMarkup('Your count is saved as counted. Staff will look into where the extra came from.'),
+      ],
     ];
   }
 
@@ -76,7 +89,8 @@ final class CountReasons {
    * @param int $delta
    *   Counted total minus system count.
    * @param string|null $positive_reason
-   *   The counter's choice when $delta is positive.
+   *   The counter's choice when $delta is positive. Without one, the count
+   *   goes to staff review.
    *
    * @return string
    *   The reason code to store.
@@ -88,7 +102,7 @@ final class CountReasons {
     if ($delta < 0) {
       return self::LOSS;
     }
-    return isset(self::positiveChoices()[$positive_reason]) ? $positive_reason : self::UNCLASSIFIED;
+    return isset(self::positiveChoices()[$positive_reason]) ? $positive_reason : self::NEEDS_REVIEW;
   }
 
 }

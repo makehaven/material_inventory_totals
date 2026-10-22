@@ -2,8 +2,8 @@
  * @file
  * Shows the right follow-up on the inventory count form as the count changes.
  *
- * Above the system count: ask whether it is an unlogged restock or a found
- * correction. Below: say it will be recorded as loss. Purely presentational;
+ * Above the system count: ask whether it is an unlogged restock, a found
+ * correction, or "not sure" for staff to check. Below: say it will be recorded as loss. Purely presentational;
  * InventoryCountForm::validateForm() enforces the choice server-side.
  */
 (function (Drupal, once) {

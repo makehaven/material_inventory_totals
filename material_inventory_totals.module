@@ -27,6 +27,7 @@ const MATERIAL_INVENTORY_TOTALS_PHYSICAL_COUNT_REASONS = [
   'lossage',
   'restock_unlogged',
   'count_found',
+  'count_review',
 ];
 
 /**
