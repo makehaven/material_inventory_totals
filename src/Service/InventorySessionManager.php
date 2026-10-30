@@ -176,8 +176,18 @@ class InventorySessionManager {
    * How many counts have been saved since the inventory started.
    */
   public function countsSoFar(object $session): int {
-    $end = $session->completed ?: $this->time->getRequestTime();
-    return count($this->latestCounts((int) $session->started, (int) $end));
+    return count($this->latestCounts((int) $session->started, $this->windowEnd($session)));
+  }
+
+  /**
+   * When an inventory's counts stop: at finalize, not at complete.
+   *
+   * Weighed items are often counted a day or two after the rest, once the
+   * recheck list is out. They are never flagged, but they belong in the
+   * summary.
+   */
+  protected function windowEnd(object $session): int {
+    return (int) (($session->finalized ?? NULL) ?: $this->time->getRequestTime());
   }
 
   /**
@@ -279,7 +289,7 @@ class InventorySessionManager {
    * Works out the numbers staff see when an inventory is finalized.
    */
   public function summarize(object $session): array {
-    $counts = $this->latestCounts((int) $session->started, (int) ($session->completed ?: $this->time->getRequestTime()));
+    $counts = $this->latestCounts((int) $session->started, $this->windowEnd($session));
     $summary = [
       'started' => (int) $session->started,
       'finalized' => (int) ($session->finalized ?? 0),

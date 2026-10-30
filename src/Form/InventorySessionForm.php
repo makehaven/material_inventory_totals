@@ -106,7 +106,9 @@ class InventorySessionForm extends FormBase {
     $open = $this->sessions->openFlagCount((int) $session->id);
     $form['status'] = [
       '#markup' => '<p><strong>' . $this->t('Counting done; rechecking.') . '</strong> ' . $started . ' '
-      . $this->t('Completed @date.', ['@date' => $this->dateFormatter->format($session->completed, 'medium')]) . '</p>'
+      . $this->t('Completed @date.', ['@date' => $this->dateFormatter->format($session->completed, 'medium')]) . ' '
+      . $this->formatPlural($this->sessions->countsSoFar($session), '1 item counted so far.', '@count items counted so far.') . '</p>'
+      . '<p>' . $this->t('Counts saved before "Finalize", such as weighed items done later, are included in the summary.') . '</p>'
       . '<p>' . ($open
           ? $this->formatPlural($open, '1 item still needs a recheck. Recount it, confirm the count, or mark it "Not sure".', '@count items still need a recheck. Recount each one, confirm the count, or mark it "Not sure".')
           : $this->t('Every flagged item has been handled.')) . '</p>',

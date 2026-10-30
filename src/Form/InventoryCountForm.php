@@ -177,7 +177,7 @@ class InventoryCountForm extends FormBase {
 
     // Counters should know their count is part of an inventory.
     $session = \Drupal::service('material_inventory_totals.sessions')->current();
-    if ($session && !$session->completed) {
+    if ($session) {
       $form['inventory_notice'] = [
         '#type' => 'html_tag',
         '#tag' => 'div',

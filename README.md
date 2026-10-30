@@ -65,7 +65,10 @@ others see it read-only, as on the count form.
    place, so stock equals what is there now), **confirm** (a high count needs
    its reason), or **Not sure** (reason `count_review`, goes to the count
    review page; low counts can be "Not sure" too).
-5. A manager ("finalize store inventory") clicks **Finalize** once no flag is open. The summary is saved and
+   Counting can go on after this (weighed items are often done a day or two
+   later); those counts are not flagged but are in the summary.
+5. A manager ("finalize store inventory") clicks **Finalize** once no flag is open. The summary covers
+   every count from Start to Finalize, and is saved and
    emailed to `staff@makehaven.org` (override with
    `$settings['material_inventory_summary_email']`).
 
