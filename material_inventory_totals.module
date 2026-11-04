@@ -10,8 +10,15 @@ use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityFormInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Database\Query\Condition;
+use Drupal\material_inventory_totals\Controller\InventoryApiController;
 use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
+use Drupal\node\Entity\Node;
 use Drupal\node\NodeInterface;
+use Drupal\views\Plugin\views\query\QueryPluginBase;
+use Drupal\views\Plugin\views\query\Sql;
+use Drupal\views\ViewExecutable;
+use Drupal\views\Views;
 
 /**
  * Adjustment reason codes that indicate a human physically checked stock.
@@ -380,4 +387,53 @@ function material_inventory_totals_update_9001(): void {
       'required' => FALSE,
     ])->save();
   }
+}
+
+/**
+ * Implements hook_views_query_alter().
+ *
+ * Untracked materials (meters and credits such as "Waterjet Use") have
+ * nothing to count, and the count page refuses them, so the counting
+ * checklist leaves them out. Materials with no method set stay listed.
+ */
+function material_inventory_totals_views_query_alter(ViewExecutable $view, QueryPluginBase $query): void {
+  if ($view->id() !== 'store_inventory_checklist' || !$query instanceof Sql) {
+    return;
+  }
+  $join = Views::pluginManager('join')->createInstance('standard', [
+    'table' => 'node__field_material_inventory_method',
+    'field' => 'entity_id',
+    'left_table' => 'node_field_data',
+    'left_field' => 'nid',
+    'operator' => '=',
+    'extra' => [['field' => 'deleted', 'value' => 0]],
+  ]);
+  $alias = $query->addRelationship('mit_inventory_method', $join, 'node_field_data');
+  $column = $alias . '.field_material_inventory_method_value';
+  $query->addWhere('mit_not_untracked', (new Condition('OR'))
+    ->isNull($column)
+    ->condition($column, InventoryApiController::UNTRACKED, '<>'));
+}
+
+/**
+ * Implements hook_views_pre_render().
+ *
+ * The material page's inventory block offers "Update Inventory Count". For an
+ * untracked material that page is refused, so offer only the adjustment.
+ */
+function material_inventory_totals_views_pre_render(ViewExecutable $view): void {
+  if ($view->id() !== 'material_inventory_block' || empty($view->header['area'])) {
+    return;
+  }
+  $content = $view->header['area']->options['content']['value'] ?? '';
+  if (!str_contains($content, '/inventory-count')) {
+    return;
+  }
+  $nid = $view->args[0] ?? NULL;
+  $material = is_numeric($nid) ? Node::load((int) $nid) : NULL;
+  if (!$material instanceof NodeInterface || !InventoryApiController::isUntracked($material)) {
+    return;
+  }
+  $view->header['area']->options['content']['value'] = '<p class="text-muted mb-1">Untracked (a meter or credit): there is nothing to count.</p>'
+    . '<a href="/admin/content/material_inventory/add/inventory_adjustment?material=' . (int) $material->id() . '" class="btn btn-primary colorbox-load" data-colorbox-iframe="true">Other Inventory Adjustment</a><br>';
 }
