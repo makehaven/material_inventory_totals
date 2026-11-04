@@ -13,6 +13,7 @@ use Drupal\Core\Site\Settings;
 use Drupal\Core\Url;
 use Drupal\material_inventory_totals\CountReasons;
 use Drupal\material_inventory_totals\InventoryFlagRules;
+use Drupal\material_inventory_totals\Controller\InventoryApiController;
 use Drupal\node\NodeInterface;
 
 /**
@@ -107,7 +108,8 @@ class InventorySessionManager {
     foreach ($this->latestCounts((int) $session->started, $now) as $adjustment) {
       // Weighed or estimated items (glazes, roll paper) are often zeroed
       // out on purpose, so a big swing there is expected.
-      if ($this->isEstimated($adjustment->get('field_inventory_ref_material')->entity)) {
+      $material = $adjustment->get('field_inventory_ref_material')->entity;
+      if ($this->isEstimated($material) || ($material instanceof NodeInterface && InventoryApiController::isUntracked($material))) {
         continue;
       }
       $context = $this->countContext($adjustment);
@@ -296,6 +298,7 @@ class InventorySessionManager {
       'items_counted' => count($counts),
       'matched' => 0,
       'estimated' => 0,
+      'checked' => 0,
       'over' => ['n' => 0, 'value' => 0.0, 'by_reason' => []],
       'short' => ['n' => 0, 'value' => 0.0],
       'flags' => ['total' => 0, 'confirmed' => 0, 'recounted' => 0, 'not_sure' => 0],
@@ -306,7 +309,11 @@ class InventorySessionManager {
       $delta = (int) $adjustment->get('field_inventory_quantity_change')->value;
       $material = $adjustment->get('field_inventory_ref_material')->entity;
       $value = abs($delta) * $this->unitCost($material);
-      if ($this->isEstimated($material)) {
+      if ($material instanceof NodeInterface && InventoryApiController::isUntracked($material)) {
+        // A note, not a count: the number is money or machine time.
+        $summary['checked']++;
+      }
+      elseif ($this->isEstimated($material)) {
         // Reported on their own: zeroing out is not a loss.
         $summary['estimated']++;
       }

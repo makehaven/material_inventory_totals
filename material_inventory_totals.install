@@ -71,3 +71,25 @@ function material_inventory_totals_update_9002(): void {
     }
   }
 }
+
+/**
+ * Sorts items out of Untracked: supplies get checked, stock gets counted.
+ */
+function material_inventory_totals_update_9003(): void {
+  $methods = [
+    // Priced by use, with real supplies behind them.
+    3868 => 'usage_check',
+    4653 => 'usage_check',
+    // Physical stock: Water Jet Mixing Tube, saw blade, ID key cards.
+    4652 => 'counted',
+    8819 => 'counted',
+    21602 => 'counted',
+  ];
+  $storage = \Drupal::entityTypeManager()->getStorage('node');
+  foreach ($storage->loadMultiple(array_keys($methods)) as $node) {
+    if ($node->hasField('field_material_inventory_method') && $node->get('field_material_inventory_method')->value === 'untracked') {
+      $node->set('field_material_inventory_method', $methods[$node->id()]);
+      $node->save();
+    }
+  }
+}

@@ -4,3 +4,9 @@ material_inventory_totals.inventory_count_tab:
   title: 'Inventory Count'
   base_route: entity.node.canonical
   weight: 10
+
+material_inventory_totals.inventory_check_tab:
+  route_name: material_inventory_totals.inventory_check
+  title: 'Inventory Check'
+  base_route: entity.node.canonical
+  weight: 10

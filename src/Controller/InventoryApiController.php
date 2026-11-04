@@ -22,16 +22,29 @@ class InventoryApiController extends ControllerBase {
   public const MAX_RESTOCK = 100000;
 
   /**
-   * Inventory method of meters and credits: printer pages, machine time.
+   * Inventory method of charges with nothing to check: machine time, fees.
    */
   public const UNTRACKED = 'untracked';
 
   /**
-   * Whether a material is a meter or credit rather than stock on a shelf.
+   * Inventory method of items priced by use with real supplies behind them.
+   */
+  public const USAGE_CHECK = 'usage_check';
+
+  /**
+   * Whether a material's number is money or time rather than stock on a shelf.
    */
   public static function isUntracked(NodeInterface $node): bool {
     return $node->hasField('field_material_inventory_method')
-      && $node->get('field_material_inventory_method')->value === self::UNTRACKED;
+      && in_array($node->get('field_material_inventory_method')->value, [self::UNTRACKED, self::USAGE_CHECK], TRUE);
+  }
+
+  /**
+   * Whether a material is priced by use but its supplies get checked.
+   */
+  public static function isCheckOnly(NodeInterface $node): bool {
+    return $node->hasField('field_material_inventory_method')
+      && $node->get('field_material_inventory_method')->value === self::USAGE_CHECK;
   }
 
   /**
@@ -127,7 +140,8 @@ class InventoryApiController extends ControllerBase {
       'drupal_url'        => $drupal_url,
       'source_url'        => $source_url,
       // 'untracked' = a meter or credit: the app offers no count or delivery.
-      'inventory_method'  => $node->hasField('field_material_inventory_method') ? $node->get('field_material_inventory_method')->value : NULL,
+      // Items checked on the website read the same to the app.
+      'inventory_method'  => self::isUntracked($node) ? self::UNTRACKED : ($node->hasField('field_material_inventory_method') ? $node->get('field_material_inventory_method')->value : NULL),
       // How it is bought, e.g. "50# box (10 bags)", so a delivery is entered
       // in the units it is sold in.
       'purchase_unit'     => $node->hasField('field_material_purchase_unit') ? ($node->get('field_material_purchase_unit')->value ?: NULL) : NULL,

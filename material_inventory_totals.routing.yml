@@ -62,6 +62,21 @@ material_inventory_totals.inventory_count:
       node:
         type: 'entity:node'
 
+material_inventory_totals.inventory_check:
+  path: '/admin/material/{node}/inventory-check'
+  defaults:
+    _form: '\Drupal\material_inventory_totals\Form\InventoryCheckForm'
+    _title: 'Inventory check'
+  requirements:
+    _permission: 'update material inventory counts'
+    _entity_access: 'node.update'
+    _custom_access: '\Drupal\material_inventory_totals\Form\InventoryCheckForm::access'
+    node: \d+
+  options:
+    parameters:
+      node:
+        type: 'entity:node'
+
 material_inventory_totals.count_review:
   path: '/admin/material/count-review'
   defaults:

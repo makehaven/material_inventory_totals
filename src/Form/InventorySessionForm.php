@@ -229,6 +229,7 @@ class InventorySessionForm extends FormBase {
     $items = [
       $this->t('Items counted: @n (@m matched the system)', ['@n' => $s['items_counted'], '@m' => $s['matched']]),
       $this->t('Weighed or estimated items counted: @n (not checked, not in the totals below)', ['@n' => $s['estimated'] ?? 0]),
+      $this->t('Items priced by use checked: @n (notes, not in the totals below)', ['@n' => $s['checked'] ?? 0]),
       $this->t('Higher than expected: @n ($@v)', [
         '@n' => $s['over']['n'],
         '@v' => number_format($s['over']['value'], 2),

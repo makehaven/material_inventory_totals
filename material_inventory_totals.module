@@ -10,6 +10,7 @@ use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityFormInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Render\Markup;
 use Drupal\Core\Database\Query\Condition;
 use Drupal\material_inventory_totals\Controller\InventoryApiController;
 use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
@@ -66,6 +67,7 @@ function material_inventory_totals_mail(string $key, array &$message, array $par
     '',
     t('Items counted: @n (@m matched the system)', ['@n' => $s['items_counted'], '@m' => $s['matched']]),
     t('Weighed or estimated items counted: @n (not in the totals below)', ['@n' => $s['estimated'] ?? 0]),
+    t('Items priced by use checked: @n (notes, not in the totals below)', ['@n' => $s['checked'] ?? 0]),
     t('Lower than expected (loss): @n, $@v', ['@n' => $s['short']['n'], '@v' => number_format($s['short']['value'], 2)]),
     t('Higher than expected: @n, $@v', ['@n' => $s['over']['n'], '@v' => number_format($s['over']['value'], 2)]),
   ];
@@ -392,9 +394,9 @@ function material_inventory_totals_update_9001(): void {
 /**
  * Implements hook_views_query_alter().
  *
- * Untracked materials (meters and credits such as "Waterjet Use") have
- * nothing to count, and the count page refuses them, so the counting
- * checklist leaves them out. Materials with no method set stay listed.
+ * Charges (machine time, fees) have nothing to check, so the counting
+ * checklist leaves them out. Items priced by use stay listed because their
+ * supplies get checked. Materials with no method set stay listed.
  */
 function material_inventory_totals_views_query_alter(ViewExecutable $view, QueryPluginBase $query): void {
   if ($view->id() !== 'store_inventory_checklist' || !$query instanceof Sql) {
@@ -418,8 +420,9 @@ function material_inventory_totals_views_query_alter(ViewExecutable $view, Query
 /**
  * Implements hook_views_pre_render().
  *
- * The material page's inventory block offers "Update Inventory Count". For an
- * untracked material that page is refused, so offer only the adjustment.
+ * The material page's inventory block offers "Update Inventory Count", and the
+ * count page refuses items whose number is money or machine time. Offer them
+ * what applies instead.
  */
 function material_inventory_totals_views_pre_render(ViewExecutable $view): void {
   if ($view->id() !== 'material_inventory_block' || empty($view->header['area'])) {
@@ -434,6 +437,27 @@ function material_inventory_totals_views_pre_render(ViewExecutable $view): void 
   if (!$material instanceof NodeInterface || !InventoryApiController::isUntracked($material)) {
     return;
   }
-  $view->header['area']->options['content']['value'] = '<p class="text-muted mb-1">Untracked (a meter or credit): there is nothing to count.</p>'
-    . '<a href="/admin/content/material_inventory/add/inventory_adjustment?material=' . (int) $material->id() . '" class="btn btn-primary colorbox-load" data-colorbox-iframe="true">Other Inventory Adjustment</a><br>';
+  $id = (int) $material->id();
+  $adjustment = '<a href="/admin/content/material_inventory/add/inventory_adjustment?material=' . $id . '" class="btn btn-primary colorbox-load" data-colorbox-iframe="true">Other Inventory Adjustment</a><br>';
+  if (InventoryApiController::isCheckOnly($material)) {
+    $view->header['area']->options['content']['value'] = '<p class="text-muted mb-1">Priced by use, so the number here is not stock. Record what you find instead.</p>'
+      . '<a href="/admin/material/' . $id . '/inventory-check" class="btn btn-primary">Record a check</a> OR ' . $adjustment;
+    return;
+  }
+  $view->header['area']->options['content']['value'] = '<p class="text-muted mb-1">A charge with no stock: there is nothing to count.</p>' . $adjustment;
+}
+
+/**
+ * Implements hook_preprocess_views_view_field().
+ *
+ * Items priced by use get "Record a check" on the counting checklist.
+ */
+function material_inventory_totals_preprocess_views_view_field(array &$variables): void {
+  if ($variables['view']->id() !== 'store_inventory_checklist' || $variables['field']->field !== 'nothing') {
+    return;
+  }
+  $material = $variables['row']->_entity ?? NULL;
+  if ($material instanceof NodeInterface && InventoryApiController::isCheckOnly($material)) {
+    $variables['output'] = Markup::create('<a href="/admin/material/' . (int) $material->id() . '/inventory-check" class="btn btn-sm btn-primary">Record a check</a>');
+  }
 }
