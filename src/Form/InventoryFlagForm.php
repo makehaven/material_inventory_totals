@@ -108,13 +108,11 @@ class InventoryFlagForm extends FormBase {
       '#description' => $this->t('System count now: @n. The original count is corrected so stock matches what you counted.', ['@n' => $this->sessions->stockNow((int) $flag->material_id)]),
       '#states' => ['visible' => [':input[name="decision"]' => ['value' => 'recount']]],
     ];
-    $choices = CountReasons::positiveChoices();
-    unset($choices[CountReasons::NEEDS_REVIEW]);
     $form['positive_reason'] = [
       '#type' => 'radios',
       '#title' => $this->t('It is higher than the system expected. Why?'),
-      '#options' => array_map(fn($c) => $c['label'], $choices),
-      '#description' => $this->t('Needed when the count stays above the system count. Not sure? Choose "Not sure, staff will check" above.'),
+      '#options' => array_map(fn($c) => $c['label'], CountReasons::positiveChoices()),
+      '#description' => $this->t('Needed when the count stays above the system count.'),
       '#states' => ['invisible' => [':input[name="decision"]' => ['value' => 'not_sure']]],
     ];
     if ($delta <= 0) {
@@ -180,6 +178,13 @@ class InventoryFlagForm extends FormBase {
         break;
 
       case 'confirm':
+        // "The count was right, but I can't say why it is higher" is the same
+        // answer as "Not sure": it has to reach staff and the summary as one.
+        if ((int) $flag->delta > 0 && $reason === CountReasons::NEEDS_REVIEW) {
+          $this->sessions->notSure($flag, $uid, $note);
+          $this->messenger()->addStatus($this->t('Left for staff to check.'));
+          break;
+        }
         $this->sessions->confirm($flag, $uid, $reason, $note);
         $this->messenger()->addStatus($this->t('Count confirmed.'));
         break;
