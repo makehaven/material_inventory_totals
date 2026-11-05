@@ -11,6 +11,10 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
  * 136 of 142 high counts and about 20-45 items per monthly inventory. Most
  * high counts sat next to a low count on the same item, which is a counting
  * swing (usually backstock in one count and not the next), not a real gain.
+ *
+ * A difference worth less than RECHECK_FLOOR is recorded but never flagged: in
+ * the November 2026 inventory 12 of 23 rechecks were under that, worth $16.80
+ * together, and a recheck costs paid staff time.
  */
 final class InventoryFlagRules {
 
@@ -30,7 +34,7 @@ final class InventoryFlagRules {
   public const BIG_JUMP = 'big_jump';
 
   /**
-   * A shortfall worth $50 or more, or any shortfall on an item with backstock.
+   * A shortfall worth $50 or more, or on an item with backstock.
    */
   public const LOSS = 'loss';
 
@@ -50,6 +54,11 @@ final class InventoryFlagRules {
   public const LOSS_VALUE = 50.0;
 
   /**
+   * A difference worth less than this (store price) is not rechecked.
+   */
+  public const RECHECK_FLOOR = 5.0;
+
+  /**
    * Works out the flags for one count.
    *
    * @param array $count
@@ -67,6 +76,11 @@ final class InventoryFlagRules {
   public static function evaluate(array $count): array {
     $delta = (int) $count['delta'];
     if ($delta === 0) {
+      return [];
+    }
+    // An item with no price stays eligible: its value is unknown, not small.
+    $unit_cost = (float) $count['unit_cost'];
+    if ($unit_cost > 0 && abs($delta) * $unit_cost < self::RECHECK_FLOOR) {
       return [];
     }
     $flags = [];
@@ -98,7 +112,7 @@ final class InventoryFlagRules {
       self::SWING => new TranslatableMarkup('Went the other way from the last count'),
       self::ROSE_UNLOGGED => new TranslatableMarkup('Went up, no delivery logged'),
       self::BIG_JUMP => new TranslatableMarkup('Big jump from the system count'),
-      self::LOSS => new TranslatableMarkup('Loss worth checking (over $50, or the item has backstock)'),
+      self::LOSS => new TranslatableMarkup('Loss worth checking ($50 or more, or the item has backstock)'),
     ];
   }
 

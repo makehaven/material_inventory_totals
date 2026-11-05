@@ -22,7 +22,7 @@ class InventoryFlagRulesTest extends UnitTestCase {
       'system_before' => 20,
       'previous_delta' => NULL,
       'restock_since_previous' => FALSE,
-      'unit_cost' => 1.0,
+      'unit_cost' => 5.0,
       'has_backstock' => FALSE,
     ];
   }
@@ -44,6 +44,22 @@ class InventoryFlagRulesTest extends UnitTestCase {
     $this->assertSame([R::LOSS], R::evaluate($this->sample(['delta' => -2, 'unit_cost' => 25.0])));
     $this->assertSame([], R::evaluate($this->sample(['delta' => -2, 'unit_cost' => 24.0])));
     $this->assertSame([R::LOSS], R::evaluate($this->sample(['delta' => -1, 'has_backstock' => TRUE])));
+  }
+
+  /**
+   * Under $5 is left alone, whichever rule it would have tripped.
+   */
+  public function testRecheckFloor(): void {
+    // A $2 dust mask, up one with no delivery.
+    $this->assertSame([], R::evaluate($this->sample(['delta' => 1, 'unit_cost' => 2.0])));
+    // Dominos short on an item with backstock.
+    $this->assertSame([], R::evaluate($this->sample(['delta' => -2, 'unit_cost' => 0.2, 'has_backstock' => TRUE])));
+    // A swing and a big jump, still only $4.50.
+    $this->assertSame([], R::evaluate($this->sample(['delta' => 9, 'unit_cost' => 0.5, 'previous_delta' => -9, 'system_before' => 4])));
+    // Exactly $5 is checked.
+    $this->assertSame([R::ROSE_UNLOGGED], R::evaluate($this->sample(['delta' => 1, 'unit_cost' => 5.0])));
+    // No price set: the value is unknown, so it is still checked.
+    $this->assertSame([R::ROSE_UNLOGGED], R::evaluate($this->sample(['delta' => 1, 'unit_cost' => 0.0])));
   }
 
 }

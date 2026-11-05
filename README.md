@@ -60,7 +60,8 @@ others see it read-only, as on the count form.
    Each item's latest count since the start is checked by
    `InventoryFlagRules`: went the other way from the last count, went up with
    no delivery logged, more than 25% and more than 3 off, or a loss of $50+
-   (any loss on an item with backstock). Flagged items are listed by value.
+   (any loss on an item with backstock). A difference worth under $5 at store
+   price is recorded but not flagged. Flagged items are listed by value.
 4. Anyone rechecks each flag: **recount** (corrects the original count in
    place, so stock equals what is there now), **confirm** (a high count needs
    its reason), or **Not sure** (reason `count_review`, goes to the count
