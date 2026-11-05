@@ -212,13 +212,11 @@ final class InventoryOddities {
   /**
    * Who a sale was to, when known.
    *
-   * Sales through the store page have no owner; the buyer is in the memo.
+   * A memo that names the buyer wins. A sale otherwise belongs to its owner,
+   * so a cash box sale shows the staff member who entered it.
    */
   public static function buyerUid(array $row): int {
-    if ((int) $row['uid'] > 0) {
-      return (int) $row['uid'];
-    }
-    return preg_match('/UID:(\d+)/', (string) $row['memo'], $match) ? (int) $match[1] : 0;
+    return preg_match('/UID:(\d+)/', (string) $row['memo'], $match) ? (int) $match[1] : (int) $row['uid'];
   }
 
   /**

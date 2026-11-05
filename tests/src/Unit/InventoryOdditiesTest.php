@@ -232,6 +232,7 @@ class InventoryOdditiesTest extends UnitTestCase {
     $this->assertSame(3474, InventoryOddities::buyerUid(['uid' => 0, 'memo' => '[UID:3474] Sold to someone']));
     $this->assertSame(12, InventoryOddities::buyerUid(['uid' => 12, 'memo' => 'Added to tab by user 12']));
     $this->assertSame(0, InventoryOddities::buyerUid(['uid' => 0, 'memo' => '']));
+    $this->assertSame(3474, InventoryOddities::buyerUid(['uid' => 12, 'memo' => '[UID:3474] Sold to someone']));
   }
 
 }
