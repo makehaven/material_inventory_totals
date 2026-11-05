@@ -20,6 +20,7 @@ use Drupal\views\Plugin\views\query\QueryPluginBase;
 use Drupal\views\Plugin\views\query\Sql;
 use Drupal\views\ViewExecutable;
 use Drupal\views\Views;
+use Drupal\material_inventory_totals\InventorySummary;
 
 /**
  * Adjustment reason codes that indicate a human physically checked stock.
@@ -65,15 +66,28 @@ function material_inventory_totals_mail(string $key, array &$message, array $par
       '@date' => $date,
     ]),
     '',
-    t('Items counted: @n (@m matched the system)', ['@n' => $s['items_counted'], '@m' => $s['matched']]),
-    t('Weighed or estimated items counted: @n (not in the totals below)', ['@n' => $s['estimated'] ?? 0]),
-    t('Items priced by use checked: @n (notes, not in the totals below)', ['@n' => $s['checked'] ?? 0]),
-    t('Lower than expected (loss): @n, $@v', ['@n' => $s['short']['n'], '@v' => number_format($s['short']['value'], 2)]),
-    t('Higher than expected: @n, $@v', ['@n' => $s['over']['n'], '@v' => number_format($s['over']['value'], 2)]),
   ];
-  foreach ($s['over']['by_reason'] as $reason => $n) {
-    $lines[] = '  - ' . $reason . ': ' . $n;
+  $percent = InventorySummary::matchPercent($s);
+  if ($percent !== NULL) {
+    $lines[] = t('@m of the @c items we could check matched the system (@p%).', [
+      '@m' => $s['matched'],
+      '@c' => InventorySummary::checkable($s),
+      '@p' => $percent,
+    ]);
+    $lines[] = '';
   }
+  $lines[] = t('Total items counted: @n', ['@n' => $s['items_counted']]);
+  $lines[] = '  ' . t('Matched the system: @n', ['@n' => $s['matched']]);
+  $lines[] = '  ' . t('Higher than expected: @n, $@v', ['@n' => $s['over']['n'], '@v' => number_format($s['over']['value'], 2)]);
+  foreach ($s['over']['by_reason'] as $reason => $n) {
+    $lines[] = '    - ' . InventorySummary::reasonLabel((string) $reason) . ': ' . $n;
+  }
+  $lines[] = '  ' . t('Lower than expected (loss): @n, $@v', ['@n' => $s['short']['n'], '@v' => number_format($s['short']['value'], 2)]);
+  $lines[] = '  ' . t('Weighed or estimated (not checked): @n', ['@n' => $s['estimated'] ?? 0]);
+  if (!empty($s['checked'])) {
+    $lines[] = '  ' . t('Priced by use (notes only): @n', ['@n' => $s['checked']]);
+  }
+  $lines[] = '';
   $lines[] = t('Flagged for recheck: @n (@c confirmed, @r recounted, @u not sure)', [
     '@n' => $s['flags']['total'],
     '@c' => $s['flags']['confirmed'],

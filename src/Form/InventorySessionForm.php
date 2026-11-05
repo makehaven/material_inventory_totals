@@ -8,6 +8,7 @@ use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
 use Drupal\material_inventory_totals\InventoryFlagRules;
+use Drupal\material_inventory_totals\InventorySummary;
 use Drupal\material_inventory_totals\Service\InventorySessionManager;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -226,37 +227,73 @@ class InventorySessionForm extends FormBase {
    */
   protected function summaryBuild(object $session): array {
     $s = json_decode((string) $session->summary, TRUE) ?: $this->sessions->summarize($session);
-    $items = [
-      $this->t('Items counted: @n (@m matched the system)', ['@n' => $s['items_counted'], '@m' => $s['matched']]),
-      $this->t('Weighed or estimated items counted: @n (not checked, not in the totals below)', ['@n' => $s['estimated'] ?? 0]),
-      $this->t('Items priced by use checked: @n (notes, not in the totals below)', ['@n' => $s['checked'] ?? 0]),
-      $this->t('Higher than expected: @n ($@v)', [
-        '@n' => $s['over']['n'],
-        '@v' => number_format($s['over']['value'], 2),
-      ]),
-      $this->t('Lower than expected: @n ($@v)', [
-        '@n' => $s['short']['n'],
-        '@v' => number_format($s['short']['value'], 2),
-      ]),
-      $this->t('Flagged for recheck: @n (@c confirmed, @r recounted, @u not sure)', [
-        '@n' => $s['flags']['total'],
-        '@c' => $s['flags']['confirmed'],
-        '@r' => $s['flags']['recounted'],
-        '@u' => $s['flags']['not_sure'],
-      ]),
+    $none = $this->t('—');
+    $money = fn($value) => '$' . number_format((float) $value, 2);
+    $total_cell = fn($text) => ['data' => ['#markup' => '<strong>' . $text . '</strong>']];
+
+    $results = [
+      [$this->t('Matched the system'), $s['matched'], $none],
+      [$this->t('Higher than expected'), $s['over']['n'], $money($s['over']['value'])],
+      [$this->t('Lower than expected'), $s['short']['n'], $money($s['short']['value'])],
+      [$this->t('Weighed or estimated (not checked)'), $s['estimated'] ?? 0, $none],
     ];
-    foreach ($s['over']['by_reason'] as $reason => $n) {
-      $items[] = $this->t('Higher, @reason: @n', ['@reason' => $reason, '@n' => $n]);
+    if (!empty($s['checked'])) {
+      $results[] = [$this->t('Priced by use (notes only)'), $s['checked'], $none];
     }
-    return [
+    $results[] = [
+      $total_cell($this->t('Total items counted')),
+      $total_cell((string) $s['items_counted']),
+      '',
+    ];
+
+    $build = [
       'heading' => [
         '#markup' => '<p><strong>' . $this->t('Inventory finalized @date by @name.', [
           '@date' => $this->dateFormatter->format($session->finalized, 'medium'),
           '@name' => $this->userName((int) $session->finalized_by),
         ]) . '</strong></p>',
       ],
-      'list' => ['#theme' => 'item_list', '#items' => $items],
     ];
+    $percent = InventorySummary::matchPercent($s);
+    if ($percent !== NULL) {
+      $build['match_rate'] = [
+        '#markup' => '<p>' . $this->t('@m of the @c items we could check matched the system (@p%).', [
+          '@m' => $s['matched'],
+          '@c' => InventorySummary::checkable($s),
+          '@p' => $percent,
+        ]) . '</p>',
+      ];
+    }
+    $build['results'] = [
+      '#type' => 'table',
+      '#header' => [$this->t('Count result'), $this->t('Items'), $this->t('Value of the difference')],
+      '#rows' => $results,
+    ];
+    if (!empty($s['over']['by_reason'])) {
+      $reasons = [];
+      foreach ($s['over']['by_reason'] as $reason => $n) {
+        $reasons[] = [InventorySummary::reasonLabel((string) $reason), $n];
+      }
+      $build['reasons'] = [
+        '#type' => 'table',
+        '#header' => [$this->t('Why counts came out higher'), $this->t('Items')],
+        '#rows' => $reasons,
+      ];
+    }
+    $build['rechecks'] = [
+      '#type' => 'table',
+      '#header' => [$this->t('Recheck result'), $this->t('Items')],
+      '#rows' => [
+        [$this->t('Count confirmed'), $s['flags']['confirmed']],
+        [$this->t('Recounted'), $s['flags']['recounted']],
+        [$this->t('Not sure (staff)'), $s['flags']['not_sure']],
+        [$total_cell($this->t('Total flagged for recheck')), $total_cell((string) $s['flags']['total'])],
+      ],
+    ];
+    $build['rechecks_note'] = [
+      '#markup' => '<p class="description">' . $this->t('Flagged items are part of the counts above, not extra items.') . '</p>',
+    ];
+    return $build;
   }
 
   /**
