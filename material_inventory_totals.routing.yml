@@ -85,6 +85,14 @@ material_inventory_totals.count_review:
   requirements:
     _permission: 'edit any material_inventory entities'
 
+material_inventory_totals.inventory_oddities:
+  path: '/admin/material/inventory/oddities'
+  defaults:
+    _controller: '\Drupal\material_inventory_totals\Controller\InventoryOdditiesController::report'
+    _title: 'Inventory oddities'
+  requirements:
+    _permission: 'edit any material_inventory entities'
+
 material_inventory_totals.inventory:
   path: '/admin/material/inventory'
   defaults:

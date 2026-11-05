@@ -11,6 +11,7 @@ use Drupal\Core\Entity\EntityFormInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Render\Markup;
+use Drupal\Core\Url;
 use Drupal\Core\Database\Query\Condition;
 use Drupal\material_inventory_totals\Controller\InventoryApiController;
 use Drupal\material_inventory_totals\Service\InventoryTotalsCalculator;
@@ -100,6 +101,9 @@ function material_inventory_totals_mail(string $key, array &$message, array $par
   }
   $lines[] = '';
   $lines[] = t('Details: @url', ['@url' => $params['url']]);
+  $lines[] = t('What looks odd: @url', [
+    '@url' => Url::fromRoute('material_inventory_totals.inventory_oddities', [], ['absolute' => TRUE])->toString(),
+  ]);
   $message['body'][] = implode("\n", array_map('strval', $lines));
 }
 

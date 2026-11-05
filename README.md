@@ -79,6 +79,24 @@ from losses and overages. Counts outside an inventory work as before. Sessions a
 `material_inventory_session` and `material_inventory_session_flag` tables
 (`material_inventory_totals_update_9002`).
 
+## Oddities report
+
+`/admin/material/inventory/oddities` lists what looks odd over the last 30, 90 or
+365 days, for anyone with "edit any material_inventory entities". It only reads.
+The rules are in `src/InventoryOddities.php`:
+
+- **Counts that went up**, worth $5 or more, with what each looks like: a miscount
+  (the count before or after was short), a delivery nobody logged, or unexplained.
+- **Items losing stock**: shortfalls less what turned up in the period, $25 or more.
+- **Unusually small sales**: a tenth or less of the item's usual sale, on items with
+  5+ sales and a usual sale of 10+ units. Machine time priced in cents is left out,
+  and so are tab lines removed later.
+- **Weighed items zeroed out**: a reset is not a gain or a loss, so these are listed
+  apart.
+
+It cannot see a weighed item going missing. Weights are only in the count notes, and
+a count recorded as "close enough" shows no change.
+
 ## App endpoints
 
 All under OAuth2, permission `update material inventory counts`.

@@ -62,6 +62,7 @@ class InventorySessionForm extends FormBase {
     if ($session && $session->finalized) {
       $form['summary'] = $this->summaryBuild($session);
       $form['flags'] = $this->flagsTable($session, FALSE);
+      $form['oddities'] = $this->odditiesLink();
       $form['back'] = [
         '#type' => 'link',
         '#title' => $this->t('Back to the current inventory'),
@@ -80,6 +81,7 @@ class InventorySessionForm extends FormBase {
         '#name' => 'start',
         '#button_type' => 'primary',
       ];
+      $form['oddities'] = $this->odditiesLink();
       $form['history'] = $this->historyBuild();
       return $form;
     }
@@ -135,7 +137,19 @@ class InventorySessionForm extends FormBase {
         ]) . '</p>',
       ];
     }
+    $form['oddities'] = $this->odditiesLink();
     return $form;
+  }
+
+  /**
+   * A line pointing to the oddities report, for those who may see it.
+   */
+  protected function odditiesLink(): array {
+    $url = Url::fromRoute('material_inventory_totals.inventory_oddities');
+    return [
+      '#markup' => '<p>' . $this->t('<a href=":url">See what looks odd</a>: counts that went up, items losing stock and unusually small sales.', [':url' => $url->toString()]) . '</p>',
+      '#access' => $url->access(),
+    ];
   }
 
   /**
