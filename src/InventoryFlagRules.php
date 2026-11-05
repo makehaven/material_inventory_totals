@@ -14,7 +14,9 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
  *
  * A difference worth less than RECHECK_FLOOR is recorded but never flagged: in
  * the November 2026 inventory 12 of 23 rechecks were under that, worth $16.80
- * together, and a recheck costs paid staff time.
+ * together, and a recheck costs paid staff time. Any shortfall on an item with
+ * backstock was flagged until then too. Forgetting backstock tends to show as
+ * a big jump or a swing, which are still flagged.
  */
 final class InventoryFlagRules {
 
@@ -34,7 +36,7 @@ final class InventoryFlagRules {
   public const BIG_JUMP = 'big_jump';
 
   /**
-   * A shortfall worth $50 or more, or on an item with backstock.
+   * A shortfall worth $50 or more.
    */
   public const LOSS = 'loss';
 
@@ -68,7 +70,6 @@ final class InventoryFlagRules {
    *   - previous_delta: (int|null) delta of the item's previous count.
    *   - restock_since_previous: (bool) a delivery was logged since then.
    *   - unit_cost: (float) store price per unit.
-   *   - has_backstock: (bool) the item has a backstock location.
    *
    * @return string[]
    *   Flag codes, in the order of labels().
@@ -95,7 +96,7 @@ final class InventoryFlagRules {
     if ($size > self::JUMP_MIN_UNITS && $size > self::JUMP_SHARE * abs((int) $count['system_before'])) {
       $flags[] = self::BIG_JUMP;
     }
-    if ($delta < 0 && ($size * (float) $count['unit_cost'] >= self::LOSS_VALUE || !empty($count['has_backstock']))) {
+    if ($delta < 0 && $size * $unit_cost >= self::LOSS_VALUE) {
       $flags[] = self::LOSS;
     }
     return $flags;
@@ -112,7 +113,7 @@ final class InventoryFlagRules {
       self::SWING => new TranslatableMarkup('Went the other way from the last count'),
       self::ROSE_UNLOGGED => new TranslatableMarkup('Went up, no delivery logged'),
       self::BIG_JUMP => new TranslatableMarkup('Big jump from the system count'),
-      self::LOSS => new TranslatableMarkup('Loss worth checking ($50 or more, or the item has backstock)'),
+      self::LOSS => new TranslatableMarkup('Loss worth checking ($50 or more)'),
     ];
   }
 

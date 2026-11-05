@@ -23,7 +23,6 @@ class InventoryFlagRulesTest extends UnitTestCase {
       'previous_delta' => NULL,
       'restock_since_previous' => FALSE,
       'unit_cost' => 5.0,
-      'has_backstock' => FALSE,
     ];
   }
 
@@ -40,10 +39,9 @@ class InventoryFlagRulesTest extends UnitTestCase {
     $this->assertSame([R::BIG_JUMP], R::evaluate($this->sample(['delta' => -6, 'system_before' => 20])));
     $this->assertSame([], R::evaluate($this->sample(['delta' => -5, 'system_before' => 20])));
     $this->assertSame([], R::evaluate($this->sample(['delta' => -3, 'system_before' => 4])));
-    // Losses: $50 or more, or any loss on an item with backstock.
+    // Losses: $50 or more.
     $this->assertSame([R::LOSS], R::evaluate($this->sample(['delta' => -2, 'unit_cost' => 25.0])));
     $this->assertSame([], R::evaluate($this->sample(['delta' => -2, 'unit_cost' => 24.0])));
-    $this->assertSame([R::LOSS], R::evaluate($this->sample(['delta' => -1, 'has_backstock' => TRUE])));
   }
 
   /**
@@ -52,8 +50,8 @@ class InventoryFlagRulesTest extends UnitTestCase {
   public function testRecheckFloor(): void {
     // A $2 dust mask, up one with no delivery.
     $this->assertSame([], R::evaluate($this->sample(['delta' => 1, 'unit_cost' => 2.0])));
-    // Dominos short on an item with backstock.
-    $this->assertSame([], R::evaluate($this->sample(['delta' => -2, 'unit_cost' => 0.2, 'has_backstock' => TRUE])));
+    // Dominos, short.
+    $this->assertSame([], R::evaluate($this->sample(['delta' => -2, 'unit_cost' => 0.2])));
     // A swing and a big jump, still only $4.50.
     $this->assertSame([], R::evaluate($this->sample(['delta' => 9, 'unit_cost' => 0.5, 'previous_delta' => -9, 'system_before' => 4])));
     // Exactly $5 is checked.

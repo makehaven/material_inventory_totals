@@ -361,7 +361,6 @@ class InventorySessionManager {
       'previous_delta' => $previous ? (int) $previous->get('field_inventory_quantity_change')->value : NULL,
       'restock_since_previous' => $this->restockBetween($material_id, $previous ? (int) $previous->id() : 0, $id),
       'unit_cost' => $this->unitCost($material),
-      'has_backstock' => $material instanceof NodeInterface && $material->hasField('field_material_backstock') && !$material->get('field_material_backstock')->isEmpty(),
     ];
   }
 
