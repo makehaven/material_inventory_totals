@@ -90,6 +90,23 @@ class InventoryOdditiesController extends ControllerBase {
       ];
     }
 
+    $totals = InventoryOddities::countTotals($rows, $from);
+    $build['count_totals'] = $this->section(
+      $this->t('Counts short and high, by month'),
+      $this->t('At today\'s store price. Read the two together: a count that comes in short one month and high the next is often the same miscount.'),
+      [
+        $this->t('Month'),
+        $this->t('Counted short'),
+        $this->t('Counted high'),
+      ],
+      array_map(fn (string $month) => [
+        date('F Y', strtotime($month . '-01')),
+        $this->money($totals[$month]['short']),
+        $this->money($totals[$month]['high']),
+      ], array_keys($totals)),
+      $this->t('No counts came in short or high in this period.'),
+    );
+
     $build['increases'] = $this->section(
       $this->t('Counts that went up'),
       $this->t('Worth $@floor or more. Stock does not appear by itself, so each of these is a delivery nobody logged, a miscount, or an entry correcting something else.', ['@floor' => (int) InventoryOddities::INCREASE_VALUE]),

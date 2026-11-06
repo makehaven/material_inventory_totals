@@ -159,6 +159,30 @@ class InventoryOdditiesTest extends UnitTestCase {
   }
 
   /**
+   * Monthly totals keep short and high apart, and leave out what is not a count.
+   */
+  public function testCountTotalsByMonth(): void {
+    $march = strtotime('2026-03-15 12:00:00');
+    $april = strtotime('2026-04-15 12:00:00');
+    $totals = InventoryOddities::countTotals($this->history([
+      [100, 500, 'restock', 'Initial inventory', 2.0, 1],
+      [$march, -10, 'lossage', '', 2.0, 1],
+      [$march, 3, 'count_found', '', 2.0, 1],
+      [$april, -1, 'lossage', '', 2.0, 1],
+      [$april, -4, 'sale', '', 2.0, 1],
+      [$april, -250, 'lossage', 'zeroing the roll', 2.0, 1],
+    ]), $march - 1);
+    $this->assertSame(['2026-04', '2026-03'], array_keys($totals));
+    $this->assertEqualsWithDelta(20.0, $totals['2026-03']['short'], 0.001);
+    $this->assertEqualsWithDelta(6.0, $totals['2026-03']['high'], 0.001);
+    $this->assertEqualsWithDelta(2.0, $totals['2026-04']['short'], 0.001);
+    $this->assertArrayNotHasKey('2026-02', InventoryOddities::countTotals($this->history([
+      [100, 500, 'restock', 'Initial inventory', 2.0, 1],
+      [$march, -10, 'lossage', '', 2.0, 1],
+    ]), $april));
+  }
+
+  /**
    * Counts from before the period do not reach the report.
    */
   public function testEntriesBeforeThePeriodAreLeftOut(): void {

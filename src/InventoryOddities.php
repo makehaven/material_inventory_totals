@@ -210,6 +210,34 @@ final class InventoryOddities {
   }
 
   /**
+   * What counts found short and high, per month, newest first.
+   *
+   * @param array $rows
+   *   The whole history, oldest first.
+   * @param int $from
+   *   Start of the period, as a timestamp.
+   *
+   * @return array
+   *   Keyed by Y-m: short and high, in dollars at the store price.
+   */
+  public static function countTotals(array $rows, int $from): array {
+    $seen = $totals = [];
+    foreach ($rows as $row) {
+      $nid = (int) $row['nid'];
+      $class = self::classify($row, !isset($seen[$nid]));
+      $seen[$nid] = TRUE;
+      if (($class !== 'short' && $class !== 'over') || (int) $row['created'] < $from) {
+        continue;
+      }
+      $month = date('Y-m', (int) $row['created']);
+      $totals[$month] ??= ['short' => 0.0, 'high' => 0.0];
+      $totals[$month][$class === 'short' ? 'short' : 'high'] += abs((float) $row['qty']) * (float) $row['unit_cost'];
+    }
+    krsort($totals);
+    return $totals;
+  }
+
+  /**
    * Who a sale was to, when known.
    *
    * A memo that names the buyer wins. A sale otherwise belongs to its owner,
